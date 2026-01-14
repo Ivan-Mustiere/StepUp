@@ -1,34 +1,40 @@
 """
 session.py
 
-Ce fichier configure la connexion à la base de données PostgreSQL
-et fournit une session utilisable dans tout le backend.
-
-- engine       : moteur SQLAlchemy pour se connecter à PostgreSQL
-- SessionLocal : fabrique des sessions de travail (CRUD)
-- get_db       : fonction utilitaire FastAPI pour obtenir une session par requête
+Configuration de la connexion PostgreSQL via SQLAlchemy.
+Fournit une session sûre et réutilisable pour FastAPI.
 """
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
-# Crée le moteur SQLAlchemy avec l'URL de la DB
-engine = create_engine(settings.DATABASE_URL)
+# Création du moteur SQLAlchemy
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,     # évite les connexions mortes
+    echo=settings.DB_ECHO,  # logs SQL en dev uniquement
+    future=True             # SQLAlchemy 2.x
+)
 
-# Configure la session : pas de commit automatique, flush désactivé
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
+# Fabrique de sessions
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False
+)
 
 def get_db():
     """
-    Fonction utilitaire pour FastAPI.
-    Fournit une session SQLAlchemy et s'assure qu'elle se ferme correctement.
-    Usage dans une route :
-        db: Session = Depends(get_db)
+    Dépendance FastAPI.
+    Ouvre une session DB par requête et la ferme proprement.
     """
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

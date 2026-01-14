@@ -1,11 +1,24 @@
 """
 base.py
 
-Ce fichier contient la Base de SQLAlchemy. 
-Toutes les classes modèles (tables) hériteront de cette Base.
+Définition de la Base SQLAlchemy commune à tous les modèles.
+Inclut des conventions de nommage compatibles avec Alembic.
 """
 
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import MetaData
 
-# Création de la base de données de référence pour SQLAlchemy
-Base = declarative_base()
+# Conventions de nommage (important pour Alembic)
+metadata = MetaData(
+    naming_convention={
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s",
+    }
+)
+
+
+class Base(DeclarativeBase):
+    metadata = metadata
