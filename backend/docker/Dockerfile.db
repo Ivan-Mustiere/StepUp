@@ -1,22 +1,8 @@
-# Base
-FROM python:3.12-slim
+# Utiliser l'image officielle PostgreSQL 16
+FROM postgres:16
 
-# Dépendances système
-RUN apt-get update && apt-get install -y build-essential libpq-dev cron && rm -rf /var/lib/apt/lists/*
+# Copier des scripts d'initialisation si nécessaire
+COPY ./init.db /docker-entrypoint-initdb.d/
 
-WORKDIR /app
-
-# Copie requirements et installation
-COPY docker/requirements/requirements.db.txt .
-RUN pip install --no-cache-dir -r requirements.db.txt
-
-# Copie du code
-COPY ./app ./app
-
-# Script pour cron (résolution paris)
-COPY run_resolver.sh /run_resolver.sh
-RUN chmod +x /run_resolver.sh
-RUN echo "0 1 * * * /run_resolver.sh >> /var/log/cron.log 2>&1" >> /etc/crontab
-
-# Commande finale : cron + uvicorn
-CMD cron && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# Exposer le port PostgreSQL
+EXPOSE 5432

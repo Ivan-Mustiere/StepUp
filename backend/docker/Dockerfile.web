@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.web.txt
 
 # Copie du code
 COPY ./app ./app
-COPY ./alembic ./alembic
 COPY alembic.ini .
 
 # Script pour cron (résolution paris)
