@@ -1,8 +1,0 @@
-# Utiliser l'image officielle PostgreSQL 16
-FROM postgres:16
-
-# Copier des scripts d'initialisation si nécessaire
-COPY ./init.db /docker-entrypoint-initdb.d/
-
-# Exposer le port PostgreSQL
-EXPOSE 5432
