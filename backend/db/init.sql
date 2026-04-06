@@ -1,5 +1,5 @@
--- Création de la table principale des utilisateurs
-CREATE TABLE users (
+-- Schema StepUp: creation idempotente
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     pseudo VARCHAR(255) NOT NULL,
     age INT,
@@ -9,84 +9,77 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     avatar VARCHAR(255),
-    coins INT DEFAULT 0,
-    rank INT DEFAULT 0,
-    xp_total INT DEFAULT 0,
-    xp_semaine INT DEFAULT 0,
+    coins INT DEFAULT 0 CHECK (coins >= 0),
+    rank INT DEFAULT 0 CHECK (rank >= 0),
+    xp_total INT DEFAULT 0 CHECK (xp_total >= 0),
+    xp_semaine INT DEFAULT 0 CHECK (xp_semaine >= 0),
     verification_ok BOOLEAN DEFAULT FALSE,
     date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     derniere_utilisation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    stock_paris INT DEFAULT 0,
+    stock_paris INT DEFAULT 0 CHECK (stock_paris >= 0),
     vip BOOLEAN DEFAULT FALSE,
-    strick INT DEFAULT 0,
-    stock_degel_strick INT DEFAULT 0,
+    strick INT DEFAULT 0 CHECK (strick >= 0),
+    stock_degel_strick INT DEFAULT 0 CHECK (stock_degel_strick >= 0),
     league_regarde VARCHAR(100),
-    pas_total INT DEFAULT 0
+    pas_total INT DEFAULT 0 CHECK (pas_total >= 0)
 );
 
--- Table des amis
-CREATE TABLE user_friends (
+CREATE TABLE IF NOT EXISTS user_friends (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     friend_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE(user_id, friend_user_id)
+    UNIQUE(user_id, friend_user_id),
+    CHECK (user_id <> friend_user_id)
 );
 
--- Table des communautés
-CREATE TABLE user_communautes (
+CREATE TABLE IF NOT EXISTS user_communautes (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     communaute_id INT NOT NULL,
     UNIQUE(user_id, communaute_id)
 );
 
--- Table des clubs
-CREATE TABLE user_clubs (
+CREATE TABLE IF NOT EXISTS user_clubs (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     club_id INT NOT NULL,
-    type VARCHAR(50) CHECK (type IN ('favori', 'detest')),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('favori', 'detest')),
     UNIQUE(user_id, club_id)
 );
 
--- Table des jeux
-CREATE TABLE user_jeux (
+CREATE TABLE IF NOT EXISTS user_jeux (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     jeu_id INT NOT NULL,
     UNIQUE(user_id, jeu_id)
 );
 
--- Table des succès
-CREATE TABLE user_succes (
+CREATE TABLE IF NOT EXISTS user_succes (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     succes_name VARCHAR(255) NOT NULL
 );
 
--- Table historique des paris
-CREATE TABLE user_historique_parie (
+CREATE TABLE IF NOT EXISTS user_historique_parie (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     paris_detail JSONB NOT NULL
 );
 
--- Table historique des pas
-CREATE TABLE user_pas_history (
+CREATE TABLE IF NOT EXISTS user_pas_history (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date DATE NOT NULL,
-    pas INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    pas INT NOT NULL CHECK (pas >= 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, date)
 );
 
--- Table des événements
-CREATE TABLE user_evenements (
+CREATE TABLE IF NOT EXISTS user_evenements (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     evenement_id INT NOT NULL
 );
 
--- Index pour optimiser certaines recherches
-CREATE INDEX idx_user_email ON users(email);
-CREATE INDEX idx_user_pas_history_user_date ON user_pas_history(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_user_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_user_pas_history_user_date ON user_pas_history(user_id, date);
