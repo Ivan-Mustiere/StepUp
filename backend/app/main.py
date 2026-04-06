@@ -1,8 +1,10 @@
 import os
 import re
 import base64
+import secrets
 import hashlib
 import hmac
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
@@ -30,6 +32,7 @@ DATABASE_URL = os.getenv(
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -110,6 +113,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 
@@ -144,6 +148,10 @@ class BetCreate(BaseModel):
     mise_min: int = 0
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 def _connect():
     parsed = urlparse(DATABASE_URL)
     return psycopg2.connect(
@@ -161,6 +169,10 @@ def _create_access_token(subject: str) -> str:
     )
     payload = {"sub": subject, "exp": expires_at}
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _hash_value(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _hash_password(password: str) -> str:
@@ -219,9 +231,34 @@ def _require_admin(current_user):
         raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs.")
 
 
+def _issue_refresh_token(conn, user_id: int) -> str:
+    token = secrets.token_urlsafe(48)
+    token_hash = _hash_value(token)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO user_refresh_tokens (user_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (user_id, token_hash, expires_at),
+        )
+    return token
+
+
 @app.on_event("startup")
 def ensure_extended_schema():
-    conn = _connect()
+    conn = None
+    last_error = None
+    for _ in range(15):
+        try:
+            conn = _connect()
+            break
+        except psycopg2.OperationalError as exc:
+            last_error = exc
+            time.sleep(1)
+    if conn is None:
+        raise RuntimeError(f"Connexion DB impossible au demarrage: {last_error}")
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -271,6 +308,15 @@ def ensure_extended_schema():
                     statut VARCHAR(20) NOT NULL DEFAULT 'actif'
                         CHECK (statut IN ('actif', 'ferme', 'regle')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS user_refresh_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token_hash VARCHAR(255) NOT NULL UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    revoked_at TIMESTAMP
                 );
                 """
             )
@@ -345,8 +391,73 @@ def login(payload: LoginRequest):
             if not _verify_password(payload.password, password_hash):
                 raise HTTPException(status_code=401, detail="Identifiants invalides.")
 
-            token = _create_access_token(str(user_id))
-            return {"access_token": token, "token_type": "bearer"}
+            access_token = _create_access_token(str(user_id))
+            refresh_token = _issue_refresh_token(conn, user_id)
+            conn.commit()
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+            }
+    finally:
+        conn.close()
+
+
+@app.post("/api/v1/auth/refresh", response_model=TokenResponse)
+def refresh_token(payload: RefreshTokenRequest):
+    token_hash = _hash_value(payload.refresh_token)
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, user_id, expires_at, revoked_at
+                FROM user_refresh_tokens
+                WHERE token_hash = %s
+                """,
+                (token_hash,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=401, detail="Refresh token invalide.")
+
+            token_id, user_id, expires_at, revoked_at = row
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if revoked_at is not None or expires_at <= now:
+                raise HTTPException(status_code=401, detail="Refresh token expire ou revoque.")
+
+            cur.execute(
+                "UPDATE user_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (token_id,),
+            )
+            access_token = _create_access_token(str(user_id))
+            new_refresh_token = _issue_refresh_token(conn, user_id)
+            conn.commit()
+            return {
+                "access_token": access_token,
+                "refresh_token": new_refresh_token,
+                "token_type": "bearer",
+            }
+    finally:
+        conn.close()
+
+
+@app.post("/api/v1/auth/logout")
+def logout(payload: RefreshTokenRequest):
+    token_hash = _hash_value(payload.refresh_token)
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE user_refresh_tokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE token_hash = %s AND revoked_at IS NULL
+                """,
+                (token_hash,),
+            )
+            conn.commit()
+            return {"revoked": cur.rowcount > 0}
     finally:
         conn.close()
 
@@ -432,6 +543,115 @@ def accept_friend_request(request_id: int, current_user=Depends(_get_current_use
         conn.close()
 
 
+@app.post("/api/v1/friends/requests/{request_id}/reject")
+def reject_friend_request(request_id: int, current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE user_friend_requests
+                SET status = 'rejected'
+                WHERE id = %s AND receiver_user_id = %s AND status = 'pending'
+                """,
+                (request_id, current_user[0]),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Demande introuvable, deja traitee, ou non autorisee.",
+                )
+            conn.commit()
+            return {"status": "rejected"}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/v1/friends/requests/{request_id}")
+def cancel_friend_request(request_id: int, current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM user_friend_requests
+                WHERE id = %s AND sender_user_id = %s AND status = 'pending'
+                """,
+                (request_id, current_user[0]),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Demande introuvable, deja traitee, ou non autorisee.",
+                )
+            conn.commit()
+            return {"status": "cancelled"}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/friends/requests/incoming")
+def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT r.id, r.sender_user_id, u.pseudo, u.email, r.status, r.created_at
+                FROM user_friend_requests r
+                JOIN users u ON u.id = r.sender_user_id
+                WHERE r.receiver_user_id = %s
+                ORDER BY r.created_at DESC
+                """,
+                (current_user[0],),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "request_id": r[0],
+                    "sender_user_id": r[1],
+                    "sender_pseudo": r[2],
+                    "sender_email": r[3],
+                    "status": r[4],
+                    "created_at": r[5],
+                }
+                for r in rows
+            ]
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/friends/requests/outgoing")
+def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT r.id, r.receiver_user_id, u.pseudo, u.email, r.status, r.created_at
+                FROM user_friend_requests r
+                JOIN users u ON u.id = r.receiver_user_id
+                WHERE r.sender_user_id = %s
+                ORDER BY r.created_at DESC
+                """,
+                (current_user[0],),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "request_id": r[0],
+                    "receiver_user_id": r[1],
+                    "receiver_pseudo": r[2],
+                    "receiver_email": r[3],
+                    "status": r[4],
+                    "created_at": r[5],
+                }
+                for r in rows
+            ]
+    finally:
+        conn.close()
+
+
 @app.post("/api/v1/communautes/rejoindre", status_code=201)
 def request_join_community(
     payload: CommunityJoinRequest, current_user=Depends(_get_current_user)
@@ -452,6 +672,57 @@ def request_join_community(
             req = cur.fetchone()
             conn.commit()
             return {"request_id": req[0], "status": req[1]}
+    finally:
+        conn.close()
+
+
+@app.get("/api/v1/communautes/requests/me")
+def list_my_community_requests(current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, communaute_id, status, created_at
+                FROM user_community_requests
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                """,
+                (current_user[0],),
+            )
+            rows = cur.fetchall()
+            return [
+                {
+                    "request_id": r[0],
+                    "communaute_id": r[1],
+                    "status": r[2],
+                    "created_at": r[3],
+                }
+                for r in rows
+            ]
+    finally:
+        conn.close()
+
+
+@app.delete("/api/v1/communautes/requests/{request_id}")
+def cancel_community_request(request_id: int, current_user=Depends(_get_current_user)):
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM user_community_requests
+                WHERE id = %s AND user_id = %s AND status = 'pending'
+                """,
+                (request_id, current_user[0]),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Demande introuvable, deja traitee, ou non autorisee.",
+                )
+            conn.commit()
+            return {"status": "cancelled"}
     finally:
         conn.close()
 
