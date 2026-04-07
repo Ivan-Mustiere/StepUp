@@ -13,8 +13,7 @@ class CommunityJoinRequest(BaseModel):
 
 @router.post("/rejoindre", status_code=201)
 def request_join_community(payload: CommunityJoinRequest, current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -29,14 +28,11 @@ def request_join_community(payload: CommunityJoinRequest, current_user=Depends(_
             req = cur.fetchone()
             conn.commit()
             return {"request_id": req["id"], "status": req["status"]}
-    finally:
-        conn.close()
 
 
 @router.get("/requests/me")
 def list_my_community_requests(current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -57,14 +53,11 @@ def list_my_community_requests(current_user=Depends(_get_current_user)):
                 }
                 for r in rows
             ]
-    finally:
-        conn.close()
 
 
 @router.delete("/requests/{request_id}")
 def cancel_community_request(request_id: int, current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -80,5 +73,3 @@ def cancel_community_request(request_id: int, current_user=Depends(_get_current_
                 )
             conn.commit()
             return {"status": "cancelled"}
-    finally:
-        conn.close()

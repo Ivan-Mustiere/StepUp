@@ -56,8 +56,7 @@ def _get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
 
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -71,8 +70,6 @@ def _get_current_user(token: str = Depends(oauth2_scheme)):
             if not row:
                 raise credentials_exception
             return row
-    finally:
-        conn.close()
 
 
 def _require_admin(current_user):

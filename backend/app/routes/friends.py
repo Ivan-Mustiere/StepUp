@@ -11,13 +11,30 @@ class FriendRequestCreate(BaseModel):
     friend_user_id: int
 
 
+@router.get("")
+def list_friends(current_user=Depends(_get_current_user)):
+    with _db.get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip
+                FROM user_friends f
+                JOIN users u ON u.id = f.friend_user_id
+                WHERE f.user_id = %s
+                ORDER BY u.pseudo
+                """,
+                (current_user["id"],),
+            )
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+
+
 @router.post("/requests", status_code=201)
 def send_friend_request(payload: FriendRequestCreate, current_user=Depends(_get_current_user)):
     if payload.friend_user_id == current_user["id"]:
         raise HTTPException(status_code=400, detail="Impossible de s'ajouter soi-meme.")
 
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM users WHERE id = %s", (payload.friend_user_id,))
             if not cur.fetchone():
@@ -36,14 +53,11 @@ def send_friend_request(payload: FriendRequestCreate, current_user=Depends(_get_
             req = cur.fetchone()
             conn.commit()
             return {"request_id": req["id"], "status": req["status"]}
-    finally:
-        conn.close()
 
 
 @router.post("/requests/{request_id}/accept")
 def accept_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -75,14 +89,11 @@ def accept_friend_request(request_id: int, current_user=Depends(_get_current_use
             )
             conn.commit()
             return {"status": "accepted"}
-    finally:
-        conn.close()
 
 
 @router.post("/requests/{request_id}/reject")
 def reject_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -99,14 +110,11 @@ def reject_friend_request(request_id: int, current_user=Depends(_get_current_use
                 )
             conn.commit()
             return {"status": "rejected"}
-    finally:
-        conn.close()
 
 
 @router.delete("/requests/{request_id}")
 def cancel_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -122,14 +130,11 @@ def cancel_friend_request(request_id: int, current_user=Depends(_get_current_use
                 )
             conn.commit()
             return {"status": "cancelled"}
-    finally:
-        conn.close()
 
 
 @router.get("/requests/incoming")
 def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -153,14 +158,11 @@ def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
                 }
                 for r in rows
             ]
-    finally:
-        conn.close()
 
 
 @router.get("/requests/outgoing")
 def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -184,5 +186,3 @@ def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
                 }
                 for r in rows
             ]
-    finally:
-        conn.close()

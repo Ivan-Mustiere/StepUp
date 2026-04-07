@@ -1,19 +1,39 @@
 import hashlib
 import logging
 import secrets
-import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 from .config import DATABASE_URL, REFRESH_TOKEN_EXPIRE_DAYS
 
 logger = logging.getLogger("stepup")
 
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def init_pool(minconn: int = 2, maxconn: int = 10) -> None:
+    global _pool
+    parsed = urlparse(DATABASE_URL)
+    _pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=minconn,
+        maxconn=maxconn,
+        host=parsed.hostname,
+        port=parsed.port or 5432,
+        user=parsed.username,
+        password=parsed.password,
+        dbname=(parsed.path or "").lstrip("/"),
+        cursor_factory=psycopg2.extras.RealDictCursor,
+    )
+    logger.info("Pool de connexions initialisé (%d–%d connexions).", minconn, maxconn)
+
 
 def _connect():
+    """Connexion directe — utilisée uniquement en tests (pool absent)."""
     parsed = urlparse(DATABASE_URL)
     return psycopg2.connect(
         host=parsed.hostname,
@@ -23,6 +43,23 @@ def _connect():
         dbname=(parsed.path or "").lstrip("/"),
         cursor_factory=psycopg2.extras.RealDictCursor,
     )
+
+
+@contextmanager
+def get_db():
+    """Context manager : fournit une connexion depuis le pool (ou directe en tests)."""
+    if _pool is None:
+        conn = _connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
+    else:
+        conn = _pool.getconn()
+        try:
+            yield conn
+        finally:
+            _pool.putconn(conn)
 
 
 def _hash_value(value: str) -> str:
@@ -42,82 +79,3 @@ def _issue_refresh_token(conn, user_id: int) -> str:
             (user_id, token_hash, expires_at),
         )
     return token
-
-
-def ensure_extended_schema():
-    conn = None
-    last_error = None
-    for _ in range(15):
-        try:
-            conn = _connect()
-            break
-        except psycopg2.OperationalError as exc:
-            last_error = exc
-            time.sleep(1)
-    if conn is None:
-        logger.error("Connexion DB impossible au demarrage: %s", last_error)
-        raise RuntimeError(f"Connexion DB impossible au demarrage: {last_error}")
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                ALTER TABLE users
-                ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
-
-                CREATE TABLE IF NOT EXISTS user_friend_requests (
-                    id SERIAL PRIMARY KEY,
-                    sender_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    receiver_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    status VARCHAR(20) NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'accepted', 'rejected')),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(sender_user_id, receiver_user_id),
-                    CHECK (sender_user_id <> receiver_user_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS user_community_requests (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    communaute_id INT NOT NULL,
-                    status VARCHAR(20) NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'accepted', 'rejected')),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(user_id, communaute_id)
-                );
-
-                CREATE TABLE IF NOT EXISTS pronostics (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    titre VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    prediction VARCHAR(255) NOT NULL,
-                    cote NUMERIC(10, 2),
-                    statut VARCHAR(20) NOT NULL DEFAULT 'ouvert'
-                        CHECK (statut IN ('ouvert', 'termine', 'annule')),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS paris (
-                    id SERIAL PRIMARY KEY,
-                    admin_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    pronostic_id INT NOT NULL REFERENCES pronostics(id) ON DELETE CASCADE,
-                    description TEXT,
-                    mise_min INT NOT NULL DEFAULT 0 CHECK (mise_min >= 0),
-                    statut VARCHAR(20) NOT NULL DEFAULT 'actif'
-                        CHECK (statut IN ('actif', 'ferme', 'regle')),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS user_refresh_tokens (
-                    id SERIAL PRIMARY KEY,
-                    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    token_hash VARCHAR(255) NOT NULL UNIQUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    expires_at TIMESTAMP NOT NULL,
-                    revoked_at TIMESTAMP
-                );
-                """
-            )
-            conn.commit()
-    finally:
-        conn.close()

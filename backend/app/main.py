@@ -8,8 +8,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.core.config import ALLOWED_ORIGINS
-from app.core.database import ensure_extended_schema
-from app.routes import admin, auth, communautes, friends, pronostics
+from app.core.database import init_pool
+from app.routes import admin, auth, communautes, friends, pronostics, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,11 +42,12 @@ app.include_router(friends.router)
 app.include_router(communautes.router)
 app.include_router(pronostics.router)
 app.include_router(admin.router)
+app.include_router(users.router)
 
 
 @app.on_event("startup")
 def startup():
-    ensure_extended_schema()
+    init_pool()
 
 
 @app.get("/health")

@@ -1,13 +1,18 @@
-from fastapi import APIRouter, HTTPException, Request
+import re
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-import re
 
 import app.core.database as _db
-from app.core.security import _create_access_token, _hash_password, _verify_password, _get_current_user
-from fastapi import Depends
-from datetime import datetime, timezone
+from app.core.security import (
+    _create_access_token,
+    _get_current_user,
+    _hash_password,
+    _verify_password,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -30,6 +35,13 @@ class RegisterRequest(BaseModel):
         value = value.strip()
         if len(value) < 3:
             raise ValueError("Le pseudo doit contenir au moins 3 caracteres.")
+        return value
+
+    @field_validator("age")
+    @classmethod
+    def validate_age(cls, value: int | None) -> int | None:
+        if value is not None and value < 16:
+            raise ValueError("Age minimum : 16 ans.")
         return value
 
     @field_validator("email")
@@ -87,8 +99,7 @@ class RefreshTokenRequest(BaseModel):
 @limiter.limit("10/minute")
 def register(request: Request, payload: RegisterRequest):
     hashed_password = _hash_password(payload.password)
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM users WHERE email = %s", (payload.email,))
             if cur.fetchone():
@@ -130,15 +141,12 @@ def register(request: Request, payload: RegisterRequest):
                 "vip": row["vip"],
                 "date_creation": row["date_creation"],
             }
-    finally:
-        conn.close()
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 def login(request: Request, payload: LoginRequest):
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, password_hash FROM users WHERE email = %s", (payload.email,)
@@ -158,15 +166,12 @@ def login(request: Request, payload: LoginRequest):
                 "refresh_token": refresh_token,
                 "token_type": "bearer",
             }
-    finally:
-        conn.close()
 
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_token(payload: RefreshTokenRequest):
     token_hash = _db._hash_value(payload.refresh_token)
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -196,15 +201,12 @@ def refresh_token(payload: RefreshTokenRequest):
                 "refresh_token": new_refresh_token,
                 "token_type": "bearer",
             }
-    finally:
-        conn.close()
 
 
 @router.post("/logout")
 def logout(payload: RefreshTokenRequest):
     token_hash = _db._hash_value(payload.refresh_token)
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -216,8 +218,6 @@ def logout(payload: RefreshTokenRequest):
             )
             conn.commit()
             return {"revoked": cur.rowcount > 0}
-    finally:
-        conn.close()
 
 
 @router.get("/me", response_model=UserResponse)

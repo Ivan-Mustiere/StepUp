@@ -14,7 +14,6 @@ const emptyRegister = {
   password: "",
   age: "",
   genre: "",
-  region: "",
   pays: "",
 };
 
@@ -190,27 +189,24 @@ export default function App() {
             <input
               type="number"
               placeholder="Age"
+              min="16"
+              max="100"
               value={registerForm.age}
               onChange={(e) =>
                 setRegisterForm((prev) => ({ ...prev, age: e.target.value }))
               }
             />
-            <input
-              type="text"
-              placeholder="Genre"
+            <select
               value={registerForm.genre}
               onChange={(e) =>
                 setRegisterForm((prev) => ({ ...prev, genre: e.target.value }))
               }
-            />
-            <input
-              type="text"
-              placeholder="Region"
-              value={registerForm.region}
-              onChange={(e) =>
-                setRegisterForm((prev) => ({ ...prev, region: e.target.value }))
-              }
-            />
+            >
+              <option value="">Sexe</option>
+              <option value="homme">Homme</option>
+              <option value="femme">Femme</option>
+              <option value="autre">Autre</option>
+            </select>
             <input
               type="text"
               placeholder="Pays"

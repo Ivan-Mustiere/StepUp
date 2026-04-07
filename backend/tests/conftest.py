@@ -27,9 +27,10 @@ def make_conn():
 
 @pytest.fixture
 def db(monkeypatch):
-    """Mock psycopg2 : remplace _connect() pour tous les appels (startup inclus)."""
+    """Mock psycopg2 : remplace _connect() et init_pool() pour tous les appels."""
     conn, cur = make_conn()
     monkeypatch.setattr("app.core.database._connect", lambda: conn)
+    monkeypatch.setattr("app.main.init_pool", lambda **kwargs: None)
     return conn, cur
 
 

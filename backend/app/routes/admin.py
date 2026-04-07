@@ -16,8 +16,7 @@ class BetCreate(BaseModel):
 @router.post("/paris", status_code=201)
 def create_bet_admin(payload: BetCreate, current_user=Depends(_get_current_user)):
     _require_admin(current_user)
-    conn = _db._connect()
-    try:
+    with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM pronostics WHERE id = %s", (payload.pronostic_id,))
             if not cur.fetchone():
@@ -39,5 +38,3 @@ def create_bet_admin(payload: BetCreate, current_user=Depends(_get_current_user)
             row = cur.fetchone()
             conn.commit()
             return {"pari_id": row["id"], "statut": row["statut"], "created_at": row["created_at"]}
-    finally:
-        conn.close()
