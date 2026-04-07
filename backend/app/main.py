@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import base64
@@ -9,13 +10,21 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import psycopg2
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("stepup")
 
 app = FastAPI(
     title="StepUp API",
@@ -29,21 +38,39 @@ app = FastAPI(
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://appuser:secret@db:5432/appdb"
 ).replace("+psycopg2", "")
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+
+_JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+if not _JWT_SECRET_KEY or _JWT_SECRET_KEY == "change-me-in-production":
+    raise RuntimeError(
+        "JWT_SECRET_KEY n'est pas defini ou utilise la valeur par defaut. "
+        "Definissez une cle secrete forte dans votre fichier .env."
+    )
+JWT_SECRET_KEY = _JWT_SECRET_KEY
+
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-# A ajuster en production avec les domaines autorises.
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS: list[str] = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else ["http://localhost:5173", "http://localhost:3000", "http://localhost:8081"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.get("/health")
@@ -187,6 +214,7 @@ def _verify_password(password: str, stored_value: str) -> bool:
         salt = base64.b64decode(salt_b64.encode())
         stored_digest = base64.b64decode(digest_b64.encode())
     except Exception:
+        logger.warning("Valeur de mot de passe stockee malformee.")
         return False
 
     test_digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
@@ -258,6 +286,7 @@ def ensure_extended_schema():
             last_error = exc
             time.sleep(1)
     if conn is None:
+        logger.error("Connexion DB impossible au demarrage: %s", last_error)
         raise RuntimeError(f"Connexion DB impossible au demarrage: {last_error}")
     try:
         with conn.cursor() as cur:
@@ -326,7 +355,8 @@ def ensure_extended_schema():
 
 
 @app.post("/api/v1/auth/register", response_model=UserResponse, status_code=201)
-def register(payload: RegisterRequest):
+@limiter.limit("10/minute")
+def register(request: Request, payload: RegisterRequest):
     hashed_password = _hash_password(payload.password)
     conn = _connect()
     try:
@@ -376,7 +406,8 @@ def register(payload: RegisterRequest):
 
 
 @app.post("/api/v1/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest):
+@limiter.limit("5/minute")
+def login(request: Request, payload: LoginRequest):
     conn = _connect()
     try:
         with conn.cursor() as cur:

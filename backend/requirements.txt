@@ -5,3 +5,6 @@ asyncpg
 python-dotenv
 psycopg2-binary
 python-jose[cryptography]
+slowapi
+pytest
+httpx

@@ -35,7 +35,14 @@ async function request(path, options = {}) {
       }
     }
     const body = await response.text();
-    throw new Error(`Erreur API (${response.status}): ${body}`);
+    let message = body;
+    try {
+      const json = JSON.parse(body);
+      if (json.detail) {
+        message = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+      }
+    } catch (_) {}
+    throw new Error(`Erreur (${response.status}): ${message}`);
   }
   return response.json();
 }
