@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  API_BASE_URL,
   getMyProfile,
   initAuthTokens,
   login,
   logout,
   register,
 } from "./api/api";
+import AppNavigator from "./navigation/AppNavigator";
 
 const emptyRegister = {
   pseudo: "",
@@ -97,26 +97,21 @@ export default function App() {
     return <main className="center">Chargement...</main>;
   }
 
+  async function refreshProfile() {
+    try {
+      const me = await getMyProfile();
+      setProfile(me);
+    } catch (_) {}
+  }
+
   if (profile) {
-    return (
-      <main className="container">
-        <section className="card">
-          <h1>Bienvenue {profile.pseudo}</h1>
-          <p>Email: {profile.email}</p>
-          <p>Coins: {profile.coins}</p>
-          <p>XP: {profile.xp_total}</p>
-          <p>API: {API_BASE_URL}</p>
-          <button onClick={handleLogout}>Se deconnecter</button>
-        </section>
-      </main>
-    );
+    return <AppNavigator profile={profile} onLogout={handleLogout} onRefreshProfile={refreshProfile} />;
   }
 
   return (
     <main className="container">
       <section className="card">
-        <h1>StepUp Frontend</h1>
-        <p>API: {API_BASE_URL}</p>
+        <h1>StepUp</h1>
         <div className="switch">
           <button
             className={isLoginMode ? "active" : ""}

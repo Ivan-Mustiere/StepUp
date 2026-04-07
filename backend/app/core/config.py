@@ -1,5 +1,7 @@
 import os
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://appuser:secret@db:5432/appdb"
 ).replace("+psycopg2", "")

@@ -116,4 +116,95 @@ export function getMyProfile() {
   return request("/api/v1/auth/me");
 }
 
+export function getPronostics(queryString = "") {
+  return request(`/api/v1/pronostics${queryString ? `?${queryString}` : ""}`);
+}
+
+export function createPronostic(payload) {
+  return request("/api/v1/pronostics", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getUserProfile(userId) {
+  return request(`/api/v1/users/${userId}`);
+}
+
+export function getCommunautes() {
+  return request("/api/v1/communautes");
+}
+
+export function joinCommunaute(id) {
+  return request(`/api/v1/communautes/${id}/rejoindre`, { method: "POST" });
+}
+
+export function leaveCommunaute(id) {
+  return request(`/api/v1/communautes/${id}/quitter`, { method: "DELETE" });
+}
+
+export function getConversation(friendId) {
+  return request(`/api/v1/messages/${friendId}`);
+}
+
+export function sendPrivateMessage(friendId, contenu) {
+  return request(`/api/v1/messages/${friendId}`, {
+    method: "POST",
+    body: JSON.stringify({ contenu }),
+  });
+}
+
+export function getClassement(communauteId) {
+  return request(`/api/v1/communautes/${communauteId}/classement`);
+}
+
+export function getMessages(communauteId) {
+  return request(`/api/v1/communautes/${communauteId}/messages`);
+}
+
+export function sendMessage(communauteId, contenu) {
+  return request(`/api/v1/communautes/${communauteId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ contenu }),
+  });
+}
+
+export function getParis(queryString = "") {
+  return request(`/api/v1/paris${queryString ? `?${queryString}` : ""}`);
+}
+
+export function placeBet(pariId, mise) {
+  return request(`/api/v1/paris/${pariId}/miser`, {
+    method: "POST",
+    body: JSON.stringify({ mise }),
+  });
+}
+
+export function getFriends() {
+  return request("/api/v1/friends");
+}
+
+export function getFriendRequestsIncoming() {
+  return request("/api/v1/friends/requests/incoming");
+}
+
+export function sendFriendRequest(friendUserId) {
+  return request("/api/v1/friends/requests", {
+    method: "POST",
+    body: JSON.stringify({ friend_user_id: friendUserId }),
+  });
+}
+
+export function acceptFriendRequest(requestId) {
+  return request(`/api/v1/friends/requests/${requestId}/accept`, {
+    method: "POST",
+  });
+}
+
+export function rejectFriendRequest(requestId) {
+  return request(`/api/v1/friends/requests/${requestId}/reject`, {
+    method: "POST",
+  });
+}
+
 export { API_BASE_URL };

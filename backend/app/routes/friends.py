@@ -17,10 +17,14 @@ def list_friends(current_user=Depends(_get_current_user)):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip
+                SELECT u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip,
+                       ARRAY_REMOVE(ARRAY_AGG(c.nom ORDER BY c.nom), NULL) AS communautes
                 FROM user_friends f
                 JOIN users u ON u.id = f.friend_user_id
+                LEFT JOIN user_communautes uc ON uc.user_id = u.id
+                LEFT JOIN communautes c ON c.id = uc.communaute_id
                 WHERE f.user_id = %s
+                GROUP BY u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip
                 ORDER BY u.pseudo
                 """,
                 (current_user["id"],),

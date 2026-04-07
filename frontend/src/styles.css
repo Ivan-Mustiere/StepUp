@@ -73,3 +73,724 @@ button {
   color: #b91c1c;
   font-weight: 600;
 }
+
+/* ── Layout principal ── */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Barre de stats en haut ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #1e293b;
+  color: #fff;
+}
+
+.header-brand {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+}
+
+.header-stat {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* ── Barre de navigation ── */
+.tab-bar {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #dbe3ee;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tab-btn {
+  flex: 1;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: #64748b;
+  padding: 14px 0;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.tab-btn.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background: none;
+}
+
+/* ── Écrans ── */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.screen-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+/* ── Boutons variants ── */
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.btn-secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+/* ── Filtre statut ── */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  border: 1px solid #c7d2e3;
+  border-radius: 20px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.filter-btn.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+/* ── Carte pronostic ── */
+.pronostic-card {
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.pronostic-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.pronostic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pronostic-titre {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.pronostic-prediction {
+  margin: 4px 0 8px;
+  color: #475569;
+  font-style: italic;
+}
+
+.pronostic-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  flex-wrap: wrap;
+}
+
+/* ── Badge statut ── */
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* ── Détail pronostic ── */
+.detail-section {
+  margin-top: 14px;
+}
+
+.detail-label {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.detail-value {
+  margin: 0;
+  color: #1e293b;
+}
+
+/* ── Amis ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: #475569;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.friend-pseudo {
+  font-weight: 600;
+}
+
+.friend-meta {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.form-row input {
+  flex: 1;
+}
+
+.form-card {
+  padding: 16px;
+}
+
+.form-card h3 {
+  margin: 0 0 12px;
+}
+
+/* ── Prévisualisation utilisateur ── */
+.user-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  position: relative;
+}
+
+.user-preview-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.user-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.user-preview-pseudo {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.user-preview-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.user-preview-action {
+  flex-shrink: 0;
+}
+
+.sent-label {
+  font-size: 13px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.reset-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.reset-btn:hover {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+/* ── Profil ── */
+.profil-info {
+  text-align: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 16px;
+}
+
+.profil-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 8px;
+}
+
+.profil-email {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.profil-id {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: all;
+  font-family: monospace;
+}
+
+.profil-id:hover {
+  color: #2563eb;
+}
+
+.profil-stats {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* ── Paris ── */
+.pari-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pari-description {
+  margin: 2px 0 6px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.coins-badge {
+  font-size: 14px;
+  font-weight: 600;
+  background: #fef9c3;
+  color: #854d0e;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.bet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.bet-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Communautés ── */
+.jeu-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #2563eb;
+}
+
+.communaute-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.communaute-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.communaute-nom {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.communaute-membres {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.communaute-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.communaute-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.jeu-tag {
+  font-size: 12px;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* ── Chat ── */
+.chat-screen {
+  height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.chat-bubble-row {
+  display: flex;
+  flex-direction: column;
+  max-width: 75%;
+}
+
+.chat-bubble-row.mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-bubble-row.other {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.bubble-author {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 2px;
+  padding-left: 4px;
+}
+
+.chat-bubble {
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-bubble.mine {
+  background: #2563eb;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.other {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-bottom-left-radius: 4px;
+}
+
+.bubble-time {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+  padding: 0 4px;
+}
+
+.chat-input-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 4px;
+}
+
+.chat-input-bar input {
+  flex: 1;
+}
+
+.chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+/* ── Classement ── */
+.classement-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.classement-me {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.classement-rang {
+  font-size: 20px;
+  min-width: 36px;
+  text-align: center;
+}
+
+.classement-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.classement-pseudo {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.classement-xp {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.classement-coins {
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.me-tag {
+  font-size: 11px;
+  background: #2563eb;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* ── Modal profil ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(340px, 90vw);
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.modal-close:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.commu-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.commu-tag {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ── Amis ── */
+.friend-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.friend-commu {
+  font-size: 12px;
+  font-weight: 400;
+  color: #2563eb;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.bubble-author.clickable:hover {
+  text-decoration: underline;
+  color: #2563eb;
+}
+
+/* ── Divers ── */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty {
+  color: #94a3b8;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.center-btn {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}

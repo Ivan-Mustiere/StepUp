@@ -7,9 +7,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.core.config import ALLOWED_ORIGINS
+from app.core.config import ALLOWED_ORIGINS, ENVIRONMENT
 from app.core.database import init_pool
-from app.routes import admin, auth, communautes, friends, pronostics, users
+from app.routes import admin, auth, communautes, friends, messages, paris, pronostics, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +41,8 @@ app.include_router(auth.router)
 app.include_router(friends.router)
 app.include_router(communautes.router)
 app.include_router(pronostics.router)
+app.include_router(paris.router)
+app.include_router(messages.router)
 app.include_router(admin.router)
 app.include_router(users.router)
 
@@ -48,6 +50,9 @@ app.include_router(users.router)
 @app.on_event("startup")
 def startup():
     init_pool()
+    if ENVIRONMENT == "development":
+        from app.core.seed import seed_dev_data
+        seed_dev_data()
 
 
 @app.get("/health")
