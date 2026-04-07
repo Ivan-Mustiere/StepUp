@@ -29,7 +29,7 @@ def make_conn():
 def db(monkeypatch):
     """Mock psycopg2 : remplace _connect() pour tous les appels (startup inclus)."""
     conn, cur = make_conn()
-    monkeypatch.setattr("app.main._connect", lambda: conn)
+    monkeypatch.setattr("app.core.database._connect", lambda: conn)
     return conn, cur
 
 

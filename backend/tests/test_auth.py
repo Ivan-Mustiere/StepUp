@@ -6,7 +6,8 @@ from datetime import datetime
 
 import pytest
 
-from app.main import _create_access_token, _hash_password
+from app.core.security import _create_access_token
+from app.core.security import _hash_password
 
 # ---------------------------------------------------------------------------
 # Données partagées
@@ -26,8 +27,17 @@ LOGIN_PAYLOAD = {
     "password": VALID_PASSWORD,
 }
 
-# Ligne renvoyée par SELECT sur la table users
-USER_ROW = (1, "testuser", "test@example.com", 100, 0, False, datetime(2024, 1, 1), False)
+# Ligne renvoyée par SELECT sur la table users (dict pour RealDictCursor)
+USER_ROW = {
+    "id": 1,
+    "pseudo": "testuser",
+    "email": "test@example.com",
+    "coins": 100,
+    "xp_total": 0,
+    "vip": False,
+    "date_creation": datetime(2024, 1, 1),
+    "is_admin": False,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +62,15 @@ class TestRegister:
         cur.fetchone.side_effect = [
             None,  # email disponible
             None,  # pseudo disponible
-            (1, "testuser", "test@example.com", 100, 0, False, datetime(2024, 1, 1)),  # INSERT RETURNING
+            {      # INSERT RETURNING
+                "id": 1,
+                "pseudo": "testuser",
+                "email": "test@example.com",
+                "coins": 100,
+                "xp_total": 0,
+                "vip": False,
+                "date_creation": datetime(2024, 1, 1),
+            },
         ]
         resp = c.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
         assert resp.status_code == 201
@@ -63,14 +81,14 @@ class TestRegister:
 
     def test_duplicate_email(self, client):
         c, cur = client
-        cur.fetchone.side_effect = [(1,)]  # email déjà pris
+        cur.fetchone.side_effect = [{"id": 1}]  # email déjà pris
         resp = c.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
         assert resp.status_code == 409
         assert "Email" in resp.json()["detail"]
 
     def test_duplicate_pseudo(self, client):
         c, cur = client
-        cur.fetchone.side_effect = [None, (1,)]  # email ok, pseudo pris
+        cur.fetchone.side_effect = [None, {"id": 1}]  # email ok, pseudo pris
         resp = c.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
         assert resp.status_code == 409
         assert "Pseudo" in resp.json()["detail"]
@@ -113,7 +131,7 @@ class TestRegister:
 class TestLogin:
     def test_success(self, client):
         c, cur = client
-        cur.fetchone.return_value = (1, HASHED_PW)
+        cur.fetchone.return_value = {"id": 1, "password_hash": HASHED_PW}
         resp = c.post("/api/v1/auth/login", json=LOGIN_PAYLOAD)
         assert resp.status_code == 200
         data = resp.json()
@@ -123,7 +141,7 @@ class TestLogin:
 
     def test_wrong_password(self, client):
         c, cur = client
-        cur.fetchone.return_value = (1, HASHED_PW)
+        cur.fetchone.return_value = {"id": 1, "password_hash": HASHED_PW}
         resp = c.post("/api/v1/auth/login", json={**LOGIN_PAYLOAD, "password": "WrongPass1!"})
         assert resp.status_code == 401
         assert "Identifiants invalides" in resp.json()["detail"]
@@ -164,7 +182,12 @@ class TestRefreshToken:
     def test_success(self, client):
         c, cur = client
         future = datetime(2099, 1, 1)
-        cur.fetchone.return_value = (1, 42, future, None)  # token valide, non révoqué
+        cur.fetchone.return_value = {
+            "id": 1,
+            "user_id": 42,
+            "expires_at": future,
+            "revoked_at": None,
+        }
         resp = c.post("/api/v1/auth/refresh", json={"refresh_token": "any-raw-token"})
         assert resp.status_code == 200
         data = resp.json()
@@ -179,16 +202,23 @@ class TestRefreshToken:
 
     def test_revoked_token(self, client):
         c, cur = client
-        revoked_at = datetime(2024, 1, 1)
-        future = datetime(2099, 1, 1)
-        cur.fetchone.return_value = (1, 42, future, revoked_at)  # revoked_at != None
+        cur.fetchone.return_value = {
+            "id": 1,
+            "user_id": 42,
+            "expires_at": datetime(2099, 1, 1),
+            "revoked_at": datetime(2024, 1, 1),
+        }
         resp = c.post("/api/v1/auth/refresh", json={"refresh_token": "any-raw-token"})
         assert resp.status_code == 401
 
     def test_expired_token(self, client):
         c, cur = client
-        past = datetime(2000, 1, 1)
-        cur.fetchone.return_value = (1, 42, past, None)  # expires_at dans le passé
+        cur.fetchone.return_value = {
+            "id": 1,
+            "user_id": 42,
+            "expires_at": datetime(2000, 1, 1),
+            "revoked_at": None,
+        }
         resp = c.post("/api/v1/auth/refresh", json={"refresh_token": "any-raw-token"})
         assert resp.status_code == 401
 
