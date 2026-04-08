@@ -7,8 +7,34 @@ import itertools
 import logging
 from datetime import datetime, timedelta
 
-from app.core.database import get_db
+import psycopg2
+import psycopg2.extras
+from app.core.config import DATABASE_URL
 from app.core.security import _hash_password
+
+
+def _get_sync_db():
+    """Connexion synchrone psycopg2 pour le seed (exécuté au démarrage)."""
+    from contextlib import contextmanager
+    from urllib.parse import urlparse
+
+    @contextmanager
+    def _conn():
+        parsed = urlparse(DATABASE_URL)
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            user=parsed.username,
+            password=parsed.password,
+            dbname=(parsed.path or "").lstrip("/"),
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    return _conn()
 
 def _dans(hours=0, minutes=0, days=0):
     """Retourne un datetime futur relatif à maintenant."""
@@ -417,7 +443,7 @@ def seed_dev_data() -> None:
     pronostics_created = 0
     paris_created = 0
 
-    with get_db() as conn:
+    with _get_sync_db() as conn:
         with conn.cursor() as cur:
 
             # ── Utilisateurs ─────────────────────────────────────────
@@ -497,14 +523,14 @@ def seed_dev_data() -> None:
             # ── Équipes esport ────────────────────────────────────────
             for e in EQUIPES_TEST:
                 cur.execute(
-                    "SELECT id FROM equipes_esport WHERE nom = %s AND jeu = %s",
-                    (e["nom"], e["jeu"]),
+                    "SELECT id FROM equipes_esport WHERE nom = %s",
+                    (e["nom"],),
                 )
                 if cur.fetchone():
                     continue
                 cur.execute(
-                    "INSERT INTO equipes_esport (nom, jeu, couleur) VALUES (%s, %s, %s)",
-                    (e["nom"], e["jeu"], e["couleur"]),
+                    "INSERT INTO equipes_esport (nom, couleur) VALUES (%s, %s)",
+                    (e["nom"], e["couleur"]),
                 )
                 equipes_created += 1
 

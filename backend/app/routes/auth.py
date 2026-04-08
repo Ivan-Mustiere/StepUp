@@ -103,19 +103,19 @@ class RefreshTokenRequest(BaseModel):
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 @limiter.limit("10/minute")
-def register(request: Request, payload: RegisterRequest):
+async def register(request: Request, payload: RegisterRequest):
     hashed_password = _hash_password(payload.password)
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM users WHERE email = %s", (payload.email,))
-            if cur.fetchone():
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM users WHERE email = %s", (payload.email,))
+            if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Email deja utilise.")
 
-            cur.execute("SELECT 1 FROM users WHERE pseudo = %s", (payload.pseudo,))
-            if cur.fetchone():
+            await cur.execute("SELECT 1 FROM users WHERE pseudo = %s", (payload.pseudo,))
+            if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Pseudo deja utilise.")
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO users (
                     pseudo, age, genre, region, pays, email, password_hash,
@@ -136,8 +136,8 @@ def register(request: Request, payload: RegisterRequest):
                     payload.league_regarde,
                 ),
             )
-            row = cur.fetchone()
-            conn.commit()
+            row = await cur.fetchone()
+            await conn.commit()
             return {
                 "id": row["id"],
                 "pseudo": row["pseudo"],
@@ -151,13 +151,13 @@ def register(request: Request, payload: RegisterRequest):
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
-def login(request: Request, payload: LoginRequest):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def login(request: Request, payload: LoginRequest):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT id, password_hash FROM users WHERE email = %s", (payload.email.strip().lower(),)
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             if not row:
                 raise HTTPException(status_code=401, detail="Identifiants invalides.")
 
@@ -165,8 +165,8 @@ def login(request: Request, payload: LoginRequest):
                 raise HTTPException(status_code=401, detail="Identifiants invalides.")
 
             access_token = _create_access_token(str(row["id"]))
-            refresh_token = _db._issue_refresh_token(conn, row["id"])
-            conn.commit()
+            refresh_token = await _db._issue_refresh_token(conn, row["id"])
+            await conn.commit()
             return {
                 "access_token": access_token,
                 "refresh_token": refresh_token,
@@ -175,11 +175,11 @@ def login(request: Request, payload: LoginRequest):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_token(payload: RefreshTokenRequest):
+async def refresh_token(payload: RefreshTokenRequest):
     token_hash = _db._hash_value(payload.refresh_token)
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT id, user_id, expires_at, revoked_at
                 FROM user_refresh_tokens
@@ -187,7 +187,7 @@ def refresh_token(payload: RefreshTokenRequest):
                 """,
                 (token_hash,),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             if not row:
                 raise HTTPException(status_code=401, detail="Refresh token invalide.")
 
@@ -195,13 +195,13 @@ def refresh_token(payload: RefreshTokenRequest):
             if row["revoked_at"] is not None or row["expires_at"] <= now:
                 raise HTTPException(status_code=401, detail="Refresh token expire ou revoque.")
 
-            cur.execute(
+            await cur.execute(
                 "UPDATE user_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE id = %s",
                 (row["id"],),
             )
             access_token = _create_access_token(str(row["user_id"]))
-            new_refresh_token = _db._issue_refresh_token(conn, row["user_id"])
-            conn.commit()
+            new_refresh_token = await _db._issue_refresh_token(conn, row["user_id"])
+            await conn.commit()
             return {
                 "access_token": access_token,
                 "refresh_token": new_refresh_token,
@@ -210,11 +210,11 @@ def refresh_token(payload: RefreshTokenRequest):
 
 
 @router.post("/logout")
-def logout(payload: RefreshTokenRequest):
+async def logout(payload: RefreshTokenRequest):
     token_hash = _db._hash_value(payload.refresh_token)
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 UPDATE user_refresh_tokens
                 SET revoked_at = CURRENT_TIMESTAMP
@@ -222,23 +222,23 @@ def logout(payload: RefreshTokenRequest):
                 """,
                 (token_hash,),
             )
-            conn.commit()
+            await conn.commit()
             return {"revoked": cur.rowcount > 0}
 
 
 @router.post("/daily-reward")
-def daily_reward(current_user=Depends(_get_current_user)):
+async def daily_reward(current_user=Depends(_get_current_user)):
     """Récompense de connexion journalière. Appeler une fois par session."""
     today = date.today()
     yesterday = date.fromordinal(today.toordinal() - 1)
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT derniere_recompense_date, strick, coins FROM users WHERE id = %s FOR UPDATE",
                 (current_user["id"],),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             derniere = row["derniere_recompense_date"]
 
             if derniere == today:
@@ -249,17 +249,15 @@ def daily_reward(current_user=Depends(_get_current_user)):
                     "coins_total": row["coins"],
                 }
 
-            # Calcul du streak
             if derniere == yesterday:
                 nouveau_strick = row["strick"] + 1
             else:
-                nouveau_strick = 1  # reset si jour manqué
+                nouveau_strick = 1
 
-            # Récompense : 10 coins de base + 2 par jour de streak (max +30)
             bonus_streak = min((nouveau_strick - 1) * 2, 30)
             coins_gagnes = 10 + bonus_streak
 
-            cur.execute(
+            await cur.execute(
                 """
                 UPDATE users
                 SET coins = coins + %s,
@@ -270,10 +268,10 @@ def daily_reward(current_user=Depends(_get_current_user)):
                 """,
                 (coins_gagnes, nouveau_strick, today, current_user["id"]),
             )
-            conn.commit()
+            await conn.commit()
 
-            cur.execute("SELECT coins FROM users WHERE id = %s", (current_user["id"],))
-            updated = cur.fetchone()
+            await cur.execute("SELECT coins FROM users WHERE id = %s", (current_user["id"],))
+            updated = await cur.fetchone()
 
             return {
                 "already_claimed": False,
@@ -284,7 +282,7 @@ def daily_reward(current_user=Depends(_get_current_user)):
 
 
 @router.get("/me", response_model=UserResponse)
-def me(current_user=Depends(_get_current_user)):
+async def me(current_user=Depends(_get_current_user)):
     return {
         "id": current_user["id"],
         "pseudo": current_user["pseudo"],
@@ -299,4 +297,5 @@ def me(current_user=Depends(_get_current_user)):
         "xp_total": current_user["xp_total"],
         "vip": current_user["vip"],
         "date_creation": current_user["date_creation"],
+        "avatar": current_user["avatar"],
     }

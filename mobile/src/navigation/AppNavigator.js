@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +21,7 @@ import Button from "../components/Button";
 import { formatDate, statutLabel, statutColor } from "../utils/helpers";
 import {
   updateProfile,
+  uploadAvatar,
   changePassword,
   getFriends,
   getFriendRequestsIncoming,
@@ -41,6 +43,7 @@ import {
   getEquipes,
   getMyEquipes,
   setMyEquipes,
+  API_BASE_URL,
 } from "../api/api";
 
 const PAYS = [
@@ -110,7 +113,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
   function renderContent() {
     switch (tab) {
       case "paris":
-        return <ParisScreen profile={currentProfile} onBetPlaced={handleRefresh} />;
+        return <ParisScreen key={tab} profile={currentProfile} onBetPlaced={handleRefresh} />;
       case "pas":
         return <StepsScreen profile={currentProfile} onRefreshProfile={onRefreshProfile} />;
       case "communautes":
@@ -127,7 +130,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
   }
 
   const pseudo = currentProfile.pseudo ?? "?";
-  const avatar = currentProfile.avatar;
+  const avatar = currentProfile.avatar ? { uri: API_BASE_URL + currentProfile.avatar } : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -158,7 +161,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
           {/* Avatar profil */}
           <TouchableOpacity style={styles.headerAvatarBtn} onPress={() => setTab("profil")}>
             {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.headerAvatar} />
+              <Image source={avatar} style={styles.headerAvatar} />
             ) : (
               <View style={styles.headerAvatarFallback}>
                 <Text style={styles.headerAvatarText}>
@@ -218,7 +221,6 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
 }
 
 // --- Écran Paris ---
-const STATUTS_PARIS = ["", "actif", "ferme", "regle"];
 const LIMIT = 20;
 
 const CATEGORIES_PARIS = [
@@ -227,9 +229,171 @@ const CATEGORIES_PARIS = [
   { id: "Rocket League",      label: "RL",       icon: null,  source: require("../assets/images/Rocket_League.png") },
 ];
 
+const TEAM_LOGOS = {
+  "T1":          require("../assets/images/Teams/T1.png"),
+  "Fnatic":      require("../assets/images/Teams/Fanatic.png"),
+  "Fanatic":     require("../assets/images/Teams/Fanatic.png"),
+  "G2":          require("../assets/images/Teams/G2.png"),
+  "G2 Esports":  require("../assets/images/Teams/G2.png"),
+  "Gen.G":       require("../assets/images/Teams/Gen_G.png"),
+  "NaVi":        require("../assets/images/Teams/Navi.png"),
+  "Natus Vincere": require("../assets/images/Teams/Navi.png"),
+  "Cloud9":      require("../assets/images/Teams/Cloud9.png"),
+  "C9":          require("../assets/images/Teams/Cloud9.png"),
+  "Team Liquid":  require("../assets/images/Teams/Team Liquid.png"),
+  "Liquid":      require("../assets/images/Teams/Team Liquid.png"),
+  "MAD Lions":   require("../assets/images/Teams/Mad_Lion.png"),
+  "MAD":         require("../assets/images/Teams/Mad_Lion.png"),
+};
+
+function parseTeams(titre) {
+  if (!titre) return { team1: null, team2: null, tournoi: null };
+  // Format attendu : "Team1 vs Team2 — Tournoi" ou "Team1 vs Team2"
+  const [matchPart, ...tournoiParts] = titre.split(/\s*[—–-]+\s*/);
+  const tournoi = tournoiParts.join(" — ").trim() || null;
+  const vsSplit = matchPart.split(/\s+vs\.?\s+/i);
+  if (vsSplit.length >= 2) {
+    return { team1: vsSplit[0].trim(), team2: vsSplit[1].trim(), tournoi };
+  }
+  return { team1: null, team2: null, tournoi };
+}
+
+function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustMise, onChangeMise, onConfirm, onCancel, isFavorite }) {
+  const now = Date.now();
+  const debut = p.date_debut ? new Date(p.date_debut).getTime() : null;
+  const parisFerme = debut && now >= debut - 15 * 60 * 1000;
+  const enCours = debut && now >= debut && now <= debut + 3 * 60 * 60 * 1000;
+
+  const statutColor = p.statut === "actif" ? "#16a34a" : p.statut === "regle" ? "#2563eb" : "#64748b";
+
+  const { team1, team2, tournoi } = parseTeams(p.titre);
+  const logo1 = team1 ? TEAM_LOGOS[team1] : null;
+  const logo2 = team2 ? TEAM_LOGOS[team2] : null;
+  const hasLogos = logo1 || logo2;
+
+  return (
+    <Card key={p.id}>
+      {isFavorite && (
+        <View style={styles.favoriteStarBadge} pointerEvents="none">
+          <Text style={styles.favoriteStarText}>⭐</Text>
+        </View>
+      )}
+      {hasLogos ? (
+        <View style={styles.teamsHeader}>
+          <View style={styles.teamBlock}>
+            {logo1 ? (
+              <Image source={logo1} style={styles.teamLogo} resizeMode="contain" />
+            ) : (
+              <View style={styles.teamLogoPlaceholder} />
+            )}
+            <Text style={styles.teamName} numberOfLines={1}>{team1}</Text>
+          </View>
+          <View style={styles.vsBlock}>
+            <Text style={styles.vsText}>VS</Text>
+            {p.statut !== "actif" && (
+              <View style={[styles.badge, { backgroundColor: statutColor, marginTop: 4 }]}>
+                <Text style={styles.badgeText}>{p.statut}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.teamBlock}>
+            {logo2 ? (
+              <Image source={logo2} style={styles.teamLogo} resizeMode="contain" />
+            ) : (
+              <View style={styles.teamLogoPlaceholder} />
+            )}
+            <Text style={styles.teamName} numberOfLines={1}>{team2}</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.pronosticHeader}>
+          <Text style={styles.pronosticCatIcon}>
+            {CATEGORIES_PARIS.find((c) => c.id === p.categorie)?.icon ?? "🎮"}
+          </Text>
+          <Text style={styles.pronosticTitre} numberOfLines={1}>{p.titre}</Text>
+          {p.statut !== "actif" && (
+            <View style={[styles.badge, { backgroundColor: statutColor }]}>
+              <Text style={styles.badgeText}>{p.statut}</Text>
+            </View>
+          )}
+        </View>
+      )}
+      {tournoi && <Text style={styles.tournoiText}>{tournoi}</Text>}
+      <Text style={styles.prediction}>"{p.prediction}"</Text>
+      {p.description ? <Text style={styles.pariDesc}>{p.description}</Text> : null}
+      <View style={styles.meta}>
+        {p.date_debut && (
+          <Text style={styles.metaText}>
+            🕐 {new Date(p.date_debut).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+          </Text>
+        )}
+        {enCours && (
+          <View style={styles.enDirectBadge}>
+            <View style={styles.enDirectDot} />
+            <Text style={styles.enDirectText}>EN DIRECT</Text>
+          </View>
+        )}
+      </View>
+
+      {p.statut === "actif" && parisFerme && (
+        <View style={styles.parisFermeRow}>
+          <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
+        </View>
+      )}
+      {p.statut === "actif" && !parisFerme && !p.deja_parie && (
+        bettingId === p.id ? (
+          <View style={styles.betForm}>
+            {betError ? <Text style={styles.error}>{betError}</Text> : null}
+            <View style={styles.betMiseZone}>
+              <View style={styles.betAdjustRow}>
+                <TouchableOpacity style={styles.betAdjBtn} onPress={() => onAdjustMise(-100)}>
+                  <Text style={styles.betAdjBtnText}>-100</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.betAdjBtn} onPress={() => onAdjustMise(-10)}>
+                  <Text style={styles.betAdjBtnText}>-10</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.betMiseInput}
+                  keyboardType="number-pad"
+                  value={mise}
+                  onChangeText={(v) => {
+                    const n = parseInt(v, 10);
+                    if (!v) { onChangeMise(""); return; }
+                    if (!isNaN(n)) onChangeMise(String(Math.min(maxCoins, n)));
+                  }}
+                  onBlur={() => {
+                    const n = parseInt(mise, 10);
+                    if (isNaN(n) || n < 10) onChangeMise("10");
+                  }}
+                  textAlign="center"
+                />
+                <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => onAdjustMise(10)}>
+                  <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+10</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => onAdjustMise(100)}>
+                  <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+100</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.betMiseLabel}>🪙 coins</Text>
+            </View>
+            <View style={styles.actions}>
+              <Button onPress={() => onConfirm(p.id)}>Confirmer</Button>
+              <Button variant="secondary" onPress={onCancel}>Annuler</Button>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.betButtonRow}>
+            <Button onPress={() => onOpenBet(p.id)}>Parier</Button>
+            <Text style={styles.betGemHint}>💎 1 gem</Text>
+          </View>
+        )
+      )}
+    </Card>
+  );
+}
+
 function ParisScreen({ profile, onBetPlaced }) {
   const [paris, setParis] = useState([]);
-  const [statut, setStatut] = useState("actif");
   const [categorie, setCategorie] = useState("League of Legends");
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -239,6 +403,7 @@ function ParisScreen({ profile, onBetPlaced }) {
   const [mise, setMise] = useState("");
   const [betError, setBetError] = useState("");
   const [betSuccess, setBetSuccess] = useState(null);
+  const [equipesNames, setEquipesNames] = useState([]);
 
   async function load(reset = false) {
     setLoading(true);
@@ -246,7 +411,6 @@ function ParisScreen({ profile, onBetPlaced }) {
     const currentOffset = reset ? 0 : offset;
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: currentOffset });
-      if (statut) params.set("statut", statut);
       const data = await getParis(params.toString());
       if (reset) {
         setParis(data);
@@ -265,9 +429,29 @@ function ParisScreen({ profile, onBetPlaced }) {
 
   useEffect(() => {
     load(true);
-  }, [statut]);
+    getMyEquipes().then((eq) => setEquipesNames(eq.map((e) => e.nom))).catch(() => {});
+  }, []);
+
+  function isPariOuvert(p) {
+    if (!p.date_debut) return true;
+    const cutoff = new Date(p.date_debut).getTime() - 15 * 60 * 1000;
+    return Date.now() < cutoff;
+  }
+
+  function isFavoriteMatch(p) {
+    if (equipesNames.length === 0) return false;
+    const { team1, team2 } = parseTeams(p.titre);
+    return equipesNames.some((n) => n === team1 || n === team2);
+  }
 
   const parisFiltres = paris.filter((p) => p.categorie === categorie);
+  const mesParis    = parisFiltres.filter((p) => p.deja_parie);
+  const autresParisBruts = parisFiltres.filter((p) => !p.deja_parie && isPariOuvert(p));
+  // Favoris en premier, puis le reste
+  const autresParis = [
+    ...autresParisBruts.filter((p) => isFavoriteMatch(p)),
+    ...autresParisBruts.filter((p) => !isFavoriteMatch(p)),
+  ];
 
   async function handleBet(pariId) {
     setBetError("");
@@ -278,6 +462,7 @@ function ParisScreen({ profile, onBetPlaced }) {
       setMise("");
       setBettingId(null);
       onBetPlaced();
+      load(true);
     } catch (err) {
       setBetError(err.message);
     }
@@ -298,6 +483,16 @@ function ParisScreen({ profile, onBetPlaced }) {
     const next = Math.min(maxCoins, Math.max(10, current + delta));
     setMise(String(next));
   }
+
+  const cardProps = {
+    bettingId, betError, mise, maxCoins,
+    onOpenBet: openBet,
+    onAdjustMise: adjustMise,
+    onChangeMise: setMise,
+    onConfirm: handleBet,
+    onCancel: () => setBettingId(null),
+    isFavoriteMatch,
+  };
 
   return (
     <View style={styles.screen}>
@@ -334,96 +529,29 @@ function ParisScreen({ profile, onBetPlaced }) {
             </Text>
           </View>
         )}
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {parisFiltres.map((p) => {
-          const parisFerme = p.date_debut &&
-            new Date() >= new Date(new Date(p.date_debut).getTime() - 15 * 60 * 1000);
-          return (
-          <Card key={p.id}>
-            <View style={styles.pronosticHeader}>
-              <Text style={styles.pronosticCatIcon}>
-                {CATEGORIES_PARIS.find((c) => c.id === p.categorie)?.icon ?? "🎮"}
-              </Text>
-              <Text style={styles.pronosticTitre} numberOfLines={1}>{p.titre}</Text>
-              <View style={[styles.badge, { backgroundColor: p.statut === "actif" ? "#16a34a" : "#64748b" }]}>
-                <Text style={styles.badgeText}>{p.statut}</Text>
-              </View>
+        {/* Bloc : mes paris */}
+        {mesParis.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🎯 Mes paris</Text>
             </View>
-            <Text style={styles.prediction}>"{p.prediction}"</Text>
-            {p.description ? <Text style={styles.pariDesc}>{p.description}</Text> : null}
-            <View style={styles.meta}>
-              {p.date_debut && (
-                <Text style={styles.metaText}>
-                  🕐 {new Date(p.date_debut).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
-                </Text>
-              )}
-            </View>
+            {mesParis.map((p) => <PariCard key={p.id} p={p} {...cardProps} isFavorite={isFavoriteMatch(p)} />)}
+          </>
+        )}
 
-            {p.statut === "actif" && parisFerme && (
-              <View style={styles.parisFermeRow}>
-                <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
+        {/* Bloc : paris disponibles */}
+        {autresParis.length > 0 && (
+          <>
+            {mesParis.length > 0 && (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>⚡ Paris disponibles</Text>
               </View>
             )}
-            {p.statut === "actif" && !parisFerme && (
-              p.deja_parie ? (
-                <View style={styles.dejaParieRow}>
-                  <Text style={styles.dejaParieText}>✓ Vous avez déjà parié</Text>
-                </View>
-              ) : bettingId === p.id ? (
-                <View style={styles.betForm}>
-                  {betError ? <Text style={styles.error}>{betError}</Text> : null}
-
-                  {/* Zone mise centrale */}
-                  <View style={styles.betMiseZone}>
-                    <View style={styles.betAdjustRow}>
-                      <TouchableOpacity style={styles.betAdjBtn} onPress={() => adjustMise(-100)}>
-                        <Text style={styles.betAdjBtnText}>-100</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.betAdjBtn} onPress={() => adjustMise(-10)}>
-                        <Text style={styles.betAdjBtnText}>-10</Text>
-                      </TouchableOpacity>
-                      <TextInput
-                        style={styles.betMiseInput}
-                        keyboardType="number-pad"
-                        value={mise}
-                        onChangeText={(v) => {
-                          const n = parseInt(v, 10);
-                          if (!v) { setMise(""); return; }
-                          if (!isNaN(n)) setMise(String(Math.min(maxCoins, n)));
-                        }}
-                        onBlur={() => {
-                          const n = parseInt(mise, 10);
-                          if (isNaN(n) || n < 10) setMise("10");
-                        }}
-                        textAlign="center"
-                      />
-                      <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => adjustMise(10)}>
-                        <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+10</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => adjustMise(100)}>
-                        <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+100</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={styles.betMiseLabel}>🪙 coins</Text>
-                  </View>
-
-                  <View style={styles.actions}>
-                    <Button onPress={() => handleBet(p.id)}>Confirmer</Button>
-                    <Button variant="secondary" onPress={() => setBettingId(null)}>Annuler</Button>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.betButtonRow}>
-                  <Button onPress={() => openBet(p.id)}>Parier</Button>
-                  <Text style={styles.betGemHint}>💎 1 gem</Text>
-                </View>
-              )
-            )}
-          </Card>
-          );
-        })}
+            {autresParis.map((p) => <PariCard key={p.id} p={p} {...cardProps} isFavorite={isFavoriteMatch(p)} />)}
+          </>
+        )}
 
         {parisFiltres.length === 0 && !loading && (
           <Text style={styles.empty}>Aucun pari disponible.</Text>
@@ -1371,6 +1499,7 @@ function AlertesScreen({ currentUser, onAction }) {
 // --- Écran Profil ---
 function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
   const [section, setSection] = useState(null); // null | "infos" | "password" | "equipes"
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [form, setForm] = useState({
     pseudo: profile.pseudo || "",
     age: profile.age ? String(profile.age) : "",
@@ -1381,10 +1510,34 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
   const [mesEquipes, setMesEquipes] = useState([]);
   const [toutesEquipes, setToutesEquipes] = useState([]);
-  const [equipesFiltreJeu, setEquipesFiltreJeu] = useState("League of Legends");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  async function handlePickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission refusée", "Autorisez l'accès à la galerie pour changer votre photo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(result.assets[0].uri);
+      await onRefreshProfile();
+      setSuccess("Photo de profil mise à jour !");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   async function handleSaveInfos() {
     setError("");
@@ -1434,6 +1587,10 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
     }
   }
 
+  useEffect(() => {
+    getMyEquipes().then((mes) => setMesEquipes(mes)).catch(() => {});
+  }, []);
+
   async function loadEquipes() {
     try {
       const [toutes, mes] = await Promise.all([getEquipes(), getMyEquipes()]);
@@ -1476,9 +1633,24 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
         {/* Carte identité */}
         <Card>
           <View style={styles.profilInfo}>
-            <View style={styles.profilAvatar}>
-              <Text style={styles.profilAvatarText}>{profile.pseudo?.[0]?.toUpperCase()}</Text>
-            </View>
+            <TouchableOpacity style={styles.profilAvatarWrapper} onPress={handlePickAvatar} disabled={avatarUploading}>
+              {profile.avatar ? (
+                <Image
+                  source={{ uri: API_BASE_URL + profile.avatar }}
+                  style={styles.profilAvatarImg}
+                />
+              ) : (
+                <View style={styles.profilAvatar}>
+                  <Text style={styles.profilAvatarText}>{profile.pseudo?.[0]?.toUpperCase()}</Text>
+                </View>
+              )}
+              <View style={styles.profilAvatarEditBadge}>
+                {avatarUploading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.profilAvatarEditIcon}>📷</Text>
+                }
+              </View>
+            </TouchableOpacity>
             <Text style={styles.profilPseudo}>{profile.pseudo}</Text>
             <Text style={styles.profilEmail}>{profile.email}</Text>
             <Text style={styles.profilId}>ID : {profile.id}</Text>
@@ -1500,6 +1672,24 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
               </View>
             ) : null}
           </View>
+
+          {mesEquipes.length > 0 && (
+            <View style={styles.profilEquipesRow}>
+              {mesEquipes.map((e) => {
+                const logo = TEAM_LOGOS[e.nom];
+                return (
+                  <View key={e.id} style={styles.profilEquipeItem}>
+                    {logo ? (
+                      <Image source={logo} style={styles.profilEquipeLogo} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.profilEquipeColorDot, { backgroundColor: e.couleur }]} />
+                    )}
+                    <Text style={[styles.profilEquipeNom, { color: e.couleur }]}>{e.nom}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </Card>
 
         {success ? (
@@ -1679,37 +1869,27 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
               </ScrollView>
             )}
 
-            {/* Filtre par jeu */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-              {["League of Legends", "Valorant", "Rocket League"].map((jeu) => (
-                <TouchableOpacity
-                  key={jeu}
-                  style={[styles.filterBtn, equipesFiltreJeu === jeu && styles.filterBtnActive, { marginRight: 6 }]}
-                  onPress={() => setEquipesFiltreJeu(jeu)}
-                >
-                  <Text style={[styles.filterBtnText, equipesFiltreJeu === jeu && styles.filterBtnTextActive]}>
-                    {jeu === "League of Legends" ? "LoL" : jeu === "Rocket League" ? "RL" : jeu}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
             {/* Liste des équipes */}
             <View style={styles.equipesGrid}>
-              {toutesEquipes.filter((e) => e.jeu === equipesFiltreJeu).map((e) => {
+              {toutesEquipes.map((e) => {
                 const selected = mesEquipes.some((s) => s.id === e.id);
+                const logo = TEAM_LOGOS[e.nom];
                 return (
                   <TouchableOpacity
                     key={e.id}
                     style={[
                       styles.equipeGridItem,
-                      selected && { borderColor: e.couleur, backgroundColor: e.couleur + "18" },
+                      selected && { borderColor: e.couleur, borderWidth: 2, backgroundColor: e.couleur + "18" },
                       !selected && mesEquipes.length >= 3 && styles.equipeGridItemDisabled,
                     ]}
                     onPress={() => toggleEquipe(e)}
                     disabled={!selected && mesEquipes.length >= 3}
                   >
-                    <View style={[styles.equipeColorBar, { backgroundColor: e.couleur }]} />
+                    {logo ? (
+                      <Image source={logo} style={styles.equipeGridLogo} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.equipeColorBar, { backgroundColor: e.couleur }]} />
+                    )}
                     <Text style={[styles.equipeGridNom, selected && { color: e.couleur, fontWeight: "700" }]}>
                       {e.nom}
                     </Text>
@@ -1975,6 +2155,60 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginRight: 6,
   },
+  favoriteStarBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 10,
+  },
+  favoriteStarText: {
+    fontSize: 16,
+  },
+  teamsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  teamBlock: {
+    flex: 1,
+    alignItems: "center",
+  },
+  teamLogo: {
+    width: 56,
+    height: 56,
+    marginBottom: 4,
+  },
+  teamLogoPlaceholder: {
+    width: 56,
+    height: 56,
+    marginBottom: 4,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 28,
+  },
+  teamName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  vsBlock: {
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  vsText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 1,
+  },
+  tournoiText: {
+    fontSize: 11,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 6,
+    fontStyle: "italic",
+  },
   // Common
   error: {
     color: "#dc2626",
@@ -2162,6 +2396,38 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontWeight: "600",
     textAlign: "center",
+  },
+  sectionHeader: {
+    marginTop: 16,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  enDirectBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginLeft: 8,
+  },
+  enDirectDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#dc2626",
+    marginRight: 5,
+  },
+  enDirectText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#dc2626",
+    letterSpacing: 0.5,
   },
   dejaParieRow: {
     marginTop: 10,
@@ -2420,19 +2686,47 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
+  profilAvatarWrapper: {
+    width: 88,
+    height: 88,
+    marginBottom: 10,
+    position: "relative",
+  },
+  profilAvatarImg: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: "#e2e8f0",
+  },
   profilAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
   },
   profilAvatarText: {
     color: "#ffffff",
-    fontSize: 28,
+    fontSize: 34,
     fontWeight: "700",
+  },
+  profilAvatarEditBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+  },
+  profilAvatarEditIcon: {
+    fontSize: 14,
   },
   profilPseudo: {
     fontSize: 20,
@@ -2466,6 +2760,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94a3b8",
     marginTop: 2,
+  },
+  profilEquipesRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 12,
+    paddingTop: 12,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  profilEquipeItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  profilEquipeLogo: {
+    width: 56,
+    height: 56,
+  },
+  profilEquipeColorDot: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  profilEquipeNom: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    color: "#94a3b8",
   },
   // Amis
   searchRow: {
@@ -2930,6 +3253,10 @@ const styles = StyleSheet.create({
     width: 4,
     height: 24,
     borderRadius: 2,
+  },
+  equipeGridLogo: {
+    width: 32,
+    height: 32,
   },
   equipeGridNom: {
     flex: 1,

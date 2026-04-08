@@ -15,16 +15,16 @@ class PronosticCreate(BaseModel):
 
 
 @router.get("")
-def list_pronostics(
+async def list_pronostics(
     statut: str | None = Query(None, description="Filtrer par statut : ouvert, termine, annule"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user=Depends(_get_current_user),
 ):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
             if statut:
-                cur.execute(
+                await cur.execute(
                     """
                     SELECT p.id, p.titre, p.description, p.prediction, p.cote,
                            p.statut, p.created_at, u.pseudo AS auteur
@@ -37,7 +37,7 @@ def list_pronostics(
                     (statut, limit, offset),
                 )
             else:
-                cur.execute(
+                await cur.execute(
                     """
                     SELECT p.id, p.titre, p.description, p.prediction, p.cote,
                            p.statut, p.created_at, u.pseudo AS auteur
@@ -48,15 +48,15 @@ def list_pronostics(
                     """,
                     (limit, offset),
                 )
-            rows = cur.fetchall()
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
 
 @router.post("", status_code=201)
-def create_pronostic(payload: PronosticCreate, current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def create_pronostic(payload: PronosticCreate, current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 INSERT INTO pronostics (user_id, titre, description, prediction, cote)
                 VALUES (%s, %s, %s, %s, %s)
@@ -70,6 +70,6 @@ def create_pronostic(payload: PronosticCreate, current_user=Depends(_get_current
                     payload.cote,
                 ),
             )
-            row = cur.fetchone()
-            conn.commit()
+            row = await cur.fetchone()
+            await conn.commit()
             return {"pronostic_id": row["id"], "statut": row["statut"], "created_at": row["created_at"]}

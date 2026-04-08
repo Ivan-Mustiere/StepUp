@@ -12,10 +12,10 @@ class FriendRequestCreate(BaseModel):
 
 
 @router.get("")
-def list_friends(current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def list_friends(current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip,
                        ARRAY_REMOVE(ARRAY_AGG(c.nom ORDER BY c.nom), NULL) AS communautes
@@ -29,22 +29,22 @@ def list_friends(current_user=Depends(_get_current_user)):
                 """,
                 (current_user["id"],),
             )
-            rows = cur.fetchall()
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
 
 @router.post("/requests", status_code=201)
-def send_friend_request(payload: FriendRequestCreate, current_user=Depends(_get_current_user)):
+async def send_friend_request(payload: FriendRequestCreate, current_user=Depends(_get_current_user)):
     if payload.friend_user_id == current_user["id"]:
         raise HTTPException(status_code=400, detail="Impossible de s'ajouter soi-meme.")
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM users WHERE id = %s", (payload.friend_user_id,))
-            if not cur.fetchone():
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM users WHERE id = %s", (payload.friend_user_id,))
+            if not await cur.fetchone():
                 raise HTTPException(status_code=404, detail="Utilisateur cible introuvable.")
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO user_friend_requests (sender_user_id, receiver_user_id)
                 VALUES (%s, %s)
@@ -54,16 +54,16 @@ def send_friend_request(payload: FriendRequestCreate, current_user=Depends(_get_
                 """,
                 (current_user["id"], payload.friend_user_id),
             )
-            req = cur.fetchone()
-            conn.commit()
+            req = await cur.fetchone()
+            await conn.commit()
             return {"request_id": req["id"], "status": req["status"]}
 
 
 @router.post("/requests/{request_id}/accept")
-def accept_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def accept_friend_request(request_id: int, current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT id, sender_user_id, receiver_user_id, status
                 FROM user_friend_requests
@@ -71,7 +71,7 @@ def accept_friend_request(request_id: int, current_user=Depends(_get_current_use
                 """,
                 (request_id,),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Demande introuvable.")
             if row["receiver_user_id"] != current_user["id"]:
@@ -79,11 +79,11 @@ def accept_friend_request(request_id: int, current_user=Depends(_get_current_use
             if row["status"] != "pending":
                 raise HTTPException(status_code=400, detail="Demande deja traitee.")
 
-            cur.execute(
+            await cur.execute(
                 "UPDATE user_friend_requests SET status = 'accepted' WHERE id = %s",
                 (request_id,),
             )
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO user_friends (user_id, friend_user_id)
                 VALUES (%s, %s), (%s, %s)
@@ -91,15 +91,15 @@ def accept_friend_request(request_id: int, current_user=Depends(_get_current_use
                 """,
                 (row["sender_user_id"], row["receiver_user_id"], row["receiver_user_id"], row["sender_user_id"]),
             )
-            conn.commit()
+            await conn.commit()
             return {"status": "accepted"}
 
 
 @router.post("/requests/{request_id}/reject")
-def reject_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def reject_friend_request(request_id: int, current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 UPDATE user_friend_requests
                 SET status = 'rejected'
@@ -112,15 +112,15 @@ def reject_friend_request(request_id: int, current_user=Depends(_get_current_use
                     status_code=404,
                     detail="Demande introuvable, deja traitee, ou non autorisee.",
                 )
-            conn.commit()
+            await conn.commit()
             return {"status": "rejected"}
 
 
 @router.delete("/requests/{request_id}")
-def cancel_friend_request(request_id: int, current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def cancel_friend_request(request_id: int, current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 DELETE FROM user_friend_requests
                 WHERE id = %s AND sender_user_id = %s AND status = 'pending'
@@ -132,15 +132,15 @@ def cancel_friend_request(request_id: int, current_user=Depends(_get_current_use
                     status_code=404,
                     detail="Demande introuvable, deja traitee, ou non autorisee.",
                 )
-            conn.commit()
+            await conn.commit()
             return {"status": "cancelled"}
 
 
 @router.delete("/{friend_id}")
-def remove_friend(friend_id: int, current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def remove_friend(friend_id: int, current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 DELETE FROM user_friends
                 WHERE (user_id = %s AND friend_user_id = %s)
@@ -150,15 +150,15 @@ def remove_friend(friend_id: int, current_user=Depends(_get_current_user)):
             )
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Ami introuvable.")
-            conn.commit()
+            await conn.commit()
             return {"status": "removed"}
 
 
 @router.get("/requests/incoming")
-def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT r.id, r.sender_user_id, u.pseudo, u.email, r.status, r.created_at
                 FROM user_friend_requests r
@@ -168,7 +168,7 @@ def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
                 """,
                 (current_user["id"],),
             )
-            rows = cur.fetchall()
+            rows = await cur.fetchall()
             return [
                 {
                     "request_id": r["id"],
@@ -183,10 +183,10 @@ def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
 
 
 @router.get("/requests/outgoing")
-def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+async def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT r.id, r.receiver_user_id, u.pseudo, u.email, r.status, r.created_at
                 FROM user_friend_requests r
@@ -196,7 +196,7 @@ def list_outgoing_friend_requests(current_user=Depends(_get_current_user)):
                 """,
                 (current_user["id"],),
             )
-            rows = cur.fetchall()
+            rows = await cur.fetchall()
             return [
                 {
                     "request_id": r["id"],

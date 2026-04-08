@@ -14,15 +14,15 @@ class BetCreate(BaseModel):
 
 
 @router.post("/paris", status_code=201)
-def create_bet_admin(payload: BetCreate, current_user=Depends(_get_current_user)):
+async def create_bet_admin(payload: BetCreate, current_user=Depends(_get_current_user)):
     _require_admin(current_user)
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM pronostics WHERE id = %s", (payload.pronostic_id,))
-            if not cur.fetchone():
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM pronostics WHERE id = %s", (payload.pronostic_id,))
+            if not await cur.fetchone():
                 raise HTTPException(status_code=404, detail="Pronostic introuvable.")
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO paris (admin_user_id, pronostic_id, description, mise_min)
                 VALUES (%s, %s, %s, %s)
@@ -35,6 +35,6 @@ def create_bet_admin(payload: BetCreate, current_user=Depends(_get_current_user)
                     payload.mise_min,
                 ),
             )
-            row = cur.fetchone()
-            conn.commit()
+            row = await cur.fetchone()
+            await conn.commit()
             return {"pari_id": row["id"], "statut": row["statut"], "created_at": row["created_at"]}

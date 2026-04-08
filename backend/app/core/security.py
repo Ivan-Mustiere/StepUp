@@ -42,7 +42,7 @@ def _verify_password(password: str, stored_value: str) -> bool:
     return hmac.compare_digest(test_digest, stored_digest)
 
 
-def _get_current_user(token: str = Depends(oauth2_scheme)):
+async def _get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token invalide ou expire.",
@@ -56,19 +56,18 @@ def _get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 SELECT id, pseudo, email, age, genre, pays, region,
-                       coins, coins_en_jeu, gems, xp_total, vip, date_creation, is_admin,
-                       equipes_esport
+                       coins, coins_en_jeu, gems, xp_total, vip, date_creation, is_admin, avatar
                 FROM users
                 WHERE id = %s
                 """,
                 (user_id,),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             if not row:
                 raise credentials_exception
             return row

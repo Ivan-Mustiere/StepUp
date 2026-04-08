@@ -2,10 +2,14 @@ alembic
 fastapi
 uvicorn[standard]
 sqlalchemy
-asyncpg
 python-dotenv
+psycopg[binary]
+psycopg-pool
 psycopg2-binary
 python-jose[cryptography]
 slowapi
 pytest
 httpx
+python-multipart
+aiofiles
+Pillow

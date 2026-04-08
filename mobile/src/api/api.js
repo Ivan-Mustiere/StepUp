@@ -231,8 +231,8 @@ export function getTodaySteps() {
   return request("/api/v1/steps/today");
 }
 
-export function getEquipes(jeu = "") {
-  return request(`/api/v1/equipes${jeu ? `?jeu=${encodeURIComponent(jeu)}` : ""}`);
+export function getEquipes() {
+  return request("/api/v1/equipes");
 }
 
 export function getMyEquipes() {
@@ -262,6 +262,28 @@ export function changePassword(currentPassword, newPassword) {
     method: "POST",
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
+}
+
+export async function uploadAvatar(imageUri) {
+  const filename = imageUri.split("/").pop();
+  const ext = filename.split(".").pop().toLowerCase();
+  const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+
+  const formData = new FormData();
+  formData.append("file", { uri: imageUri, name: filename, type: mimeType });
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/users/me/avatar`, {
+    method: "POST",
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: formData,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "Erreur lors de l'upload de l'avatar.");
+  }
+  return response.json();
 }
 
 export { API_BASE_URL };

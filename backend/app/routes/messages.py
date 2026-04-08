@@ -12,22 +12,22 @@ class MessageCreate(BaseModel):
 
 
 @router.get("/{friend_id}")
-def get_conversation(
+async def get_conversation(
     friend_id: int,
     limit: int = Query(50, ge=1, le=100),
     current_user=Depends(_get_current_user),
 ):
     """Récupère la conversation privée avec un ami."""
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT 1 FROM user_friends WHERE user_id = %s AND friend_user_id = %s",
                 (current_user["id"], friend_id),
             )
-            if not cur.fetchone():
+            if not await cur.fetchone():
                 raise HTTPException(status_code=403, detail="Vous devez être ami pour accéder à cette conversation.")
 
-            cur.execute(
+            await cur.execute(
                 """
                 SELECT id, sender_id, receiver_id, contenu, created_at,
                        (sender_id = %s) AS is_mine
@@ -44,12 +44,12 @@ def get_conversation(
                     limit,
                 ),
             )
-            rows = cur.fetchall()
+            rows = await cur.fetchall()
             return list(reversed([dict(r) for r in rows]))
 
 
 @router.post("/{friend_id}", status_code=201)
-def send_private_message(
+async def send_private_message(
     friend_id: int,
     payload: MessageCreate,
     current_user=Depends(_get_current_user),
@@ -60,16 +60,16 @@ def send_private_message(
     if len(contenu) > 1000:
         raise HTTPException(status_code=400, detail="Message trop long (max 1000 caractères).")
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT 1 FROM user_friends WHERE user_id = %s AND friend_user_id = %s",
                 (current_user["id"], friend_id),
             )
-            if not cur.fetchone():
+            if not await cur.fetchone():
                 raise HTTPException(status_code=403, detail="Vous devez être ami pour envoyer un message.")
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO messages_prives (sender_id, receiver_id, contenu)
                 VALUES (%s, %s, %s)
@@ -77,8 +77,8 @@ def send_private_message(
                 """,
                 (current_user["id"], friend_id, contenu),
             )
-            row = cur.fetchone()
-            conn.commit()
+            row = await cur.fetchone()
+            await conn.commit()
             return {
                 "id": row["id"],
                 "sender_id": current_user["id"],

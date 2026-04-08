@@ -26,6 +26,8 @@ services:
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic
+      - ./tests:/app/tests
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -48,3 +50,4 @@ services:
 volumes:
   pgdata:
   frontend_node_modules:
+  uploads_data:

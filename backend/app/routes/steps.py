@@ -17,26 +17,26 @@ class StepsSync(BaseModel):
 
 
 @router.post("")
-def sync_steps(payload: StepsSync, current_user=Depends(_get_current_user)):
+async def sync_steps(payload: StepsSync, current_user=Depends(_get_current_user)):
     if payload.pas < 0:
         raise HTTPException(status_code=400, detail="Nombre de pas invalide.")
 
     today = date.today()
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT pas, gems_awarded FROM user_pas_history WHERE user_id = %s AND date = %s",
                 (current_user["id"], today),
             )
-            existing = cur.fetchone()
+            existing = await cur.fetchone()
             old_pas = existing["pas"] if existing else 0
             gems_deja_accordes = existing["gems_awarded"] if existing else 0
 
             new_pas = max(old_pas, payload.pas)
             delta_pas = new_pas - old_pas
 
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO user_pas_history (user_id, date, pas, gems_awarded)
                 VALUES (%s, %s, %s, 0)
@@ -50,25 +50,25 @@ def sync_steps(payload: StepsSync, current_user=Depends(_get_current_user)):
             nouveaux_gems = max(0, gems_merités - gems_deja_accordes)
 
             if nouveaux_gems > 0:
-                cur.execute(
+                await cur.execute(
                     "UPDATE user_pas_history SET gems_awarded = %s WHERE user_id = %s AND date = %s",
                     (gems_merités, current_user["id"], today),
                 )
-                cur.execute(
+                await cur.execute(
                     "UPDATE users SET gems = gems + %s WHERE id = %s",
                     (nouveaux_gems, current_user["id"]),
                 )
 
             if delta_pas > 0:
-                cur.execute(
+                await cur.execute(
                     "UPDATE users SET pas_total = pas_total + %s WHERE id = %s",
                     (delta_pas, current_user["id"]),
                 )
 
-            conn.commit()
+            await conn.commit()
 
-            cur.execute("SELECT gems FROM users WHERE id = %s", (current_user["id"],))
-            user = cur.fetchone()
+            await cur.execute("SELECT gems FROM users WHERE id = %s", (current_user["id"],))
+            user = await cur.fetchone()
 
             reste = new_pas % 1000
             prochain_dans = (1000 - reste) if reste != 0 else 1000
@@ -83,20 +83,20 @@ def sync_steps(payload: StepsSync, current_user=Depends(_get_current_user)):
 
 
 @router.get("/today")
-def get_today_steps(current_user=Depends(_get_current_user)):
+async def get_today_steps(current_user=Depends(_get_current_user)):
     today = date.today()
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 "SELECT pas, gems_awarded FROM user_pas_history WHERE user_id = %s AND date = %s",
                 (current_user["id"], today),
             )
-            row = cur.fetchone()
+            row = await cur.fetchone()
             pas_today = row["pas"] if row else 0
             gems_today = row["gems_awarded"] if row else 0
 
-            cur.execute("SELECT gems FROM users WHERE id = %s", (current_user["id"],))
-            user = cur.fetchone()
+            await cur.execute("SELECT gems FROM users WHERE id = %s", (current_user["id"],))
+            user = await cur.fetchone()
 
             reste = pas_today % 1000
             prochain_dans = (1000 - reste) if reste != 0 else 1000

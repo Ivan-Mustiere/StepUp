@@ -15,62 +15,58 @@ class MiseCreate(BaseModel):
 
 
 @router.get("")
-def list_paris(
-    statut: str | None = Query(None, description="actif, ferme, regle"),
+async def list_paris(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user=Depends(_get_current_user),
 ):
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            if statut:
-                cur.execute(
-                    """
-                    SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
-                           EXISTS (
-                               SELECT 1 FROM user_paris_actifs upa
-                               WHERE upa.pari_id = pa.id AND upa.user_id = %s
-                           ) AS deja_parie
-                    FROM paris pa
-                    JOIN pronostics p ON p.id = pa.pronostic_id
-                    JOIN users u ON u.id = pa.admin_user_id
-                    WHERE pa.statut = %s
-                    ORDER BY pa.created_at DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (current_user["id"], statut, limit, offset),
+    """
+    Retourne les paris :
+    - actifs en premier, triés par date de match (date_debut ASC, puis created_at ASC)
+    - paris terminés/fermés uniquement si l'utilisateur y a parié
+    """
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
+                       pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                       EXISTS (
+                           SELECT 1 FROM user_paris_actifs upa
+                           WHERE upa.pari_id = pa.id AND upa.user_id = %s
+                       ) AS deja_parie
+                FROM paris pa
+                JOIN pronostics p ON p.id = pa.pronostic_id
+                JOIN users u ON u.id = pa.admin_user_id
+                WHERE (
+                    pa.statut = 'actif'
+                    AND (pa.date_debut IS NULL OR pa.date_debut > NOW())
                 )
-            else:
-                cur.execute(
-                    """
-                    SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
-                           EXISTS (
-                               SELECT 1 FROM user_paris_actifs upa
-                               WHERE upa.pari_id = pa.id AND upa.user_id = %s
-                           ) AS deja_parie
-                    FROM paris pa
-                    JOIN pronostics p ON p.id = pa.pronostic_id
-                    JOIN users u ON u.id = pa.admin_user_id
-                    ORDER BY pa.created_at DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (current_user["id"], limit, offset),
+                OR EXISTS (
+                    SELECT 1 FROM user_paris_actifs upa
+                    WHERE upa.pari_id = pa.id AND upa.user_id = %s
                 )
-            rows = cur.fetchall()
+                ORDER BY
+                    CASE WHEN pa.statut = 'actif' THEN 0 ELSE 1 END,
+                    pa.date_debut ASC NULLS LAST,
+                    pa.created_at ASC
+                LIMIT %s OFFSET %s
+                """,
+                (current_user["id"], current_user["id"], limit, offset),
+            )
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
 
 @router.post("/{pari_id}/miser", status_code=201)
-def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_current_user)):
+async def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_current_user)):
     if payload.mise <= 0:
         raise HTTPException(status_code=400, detail="La mise doit être supérieure à 0.")
 
-    with _db.get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, mise_min, statut, date_debut FROM paris WHERE id = %s", (pari_id,))
-            pari = cur.fetchone()
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT id, mise_min, statut, date_debut FROM paris WHERE id = %s", (pari_id,))
+            pari = await cur.fetchone()
             if not pari:
                 raise HTTPException(status_code=404, detail="Pari introuvable.")
             if pari["statut"] != "actif":
@@ -88,11 +84,11 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
                     detail=f"La mise minimum est de {pari['mise_min']} coins.",
                 )
 
-            cur.execute(
+            await cur.execute(
                 "SELECT coins, coins_en_jeu, gems FROM users WHERE id = %s FOR UPDATE",
                 (current_user["id"],),
             )
-            user = cur.fetchone()
+            user = await cur.fetchone()
 
             if user["gems"] < 1:
                 raise HTTPException(
@@ -102,17 +98,15 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
             if user["coins"] < payload.mise:
                 raise HTTPException(status_code=400, detail="Coins insuffisants.")
 
-            # Vérifier qu'il ne parie pas déjà sur ce match
-            cur.execute(
+            await cur.execute(
                 "SELECT 1 FROM user_paris_actifs WHERE user_id = %s AND pari_id = %s",
                 (current_user["id"], pari_id),
             )
-            if cur.fetchone():
+            if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Vous avez déjà parié sur ce match.")
 
-            # Déduire 1 gem + bloquer les coins + gagner XP
-            xp_gagne = 10 + min(payload.mise // 50, 40)  # 10 XP base + 1 XP par 50 coins misés (max +40)
-            cur.execute(
+            xp_gagne = 10 + min(payload.mise // 50, 40)
+            await cur.execute(
                 """
                 UPDATE users
                 SET coins = coins - %s,
@@ -125,8 +119,7 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
                 (payload.mise, payload.mise, xp_gagne, xp_gagne, current_user["id"]),
             )
 
-            # Enregistrer le pari actif
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO user_paris_actifs (user_id, pari_id, mise)
                 VALUES (%s, %s, %s)
@@ -135,8 +128,7 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
                 (current_user["id"], pari_id, payload.mise),
             )
 
-            # Historique
-            cur.execute(
+            await cur.execute(
                 """
                 INSERT INTO user_historique_parie (user_id, paris_detail)
                 VALUES (%s, %s)
@@ -147,13 +139,13 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
                 ),
             )
 
-            conn.commit()
+            await conn.commit()
 
-            cur.execute(
+            await cur.execute(
                 "SELECT coins, coins_en_jeu, gems FROM users WHERE id = %s",
                 (current_user["id"],),
             )
-            updated = cur.fetchone()
+            updated = await cur.fetchone()
 
             return {
                 "mise": payload.mise,
