@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 
 from app.core.config import ALLOWED_ORIGINS, ENVIRONMENT
 from app.core.database import init_pool
-from app.routes import admin, auth, communautes, friends, messages, paris, pronostics, steps, users
+from app.routes import admin, auth, communautes, equipes, friends, messages, paris, pronostics, steps, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +46,7 @@ app.include_router(messages.router)
 app.include_router(admin.router)
 app.include_router(steps.router)
 app.include_router(users.router)
+app.include_router(equipes.router)
 
 
 @app.on_event("startup")

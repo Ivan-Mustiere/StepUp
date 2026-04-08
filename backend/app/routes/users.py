@@ -1,3 +1,4 @@
+import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +17,16 @@ class UpdateProfileRequest(BaseModel):
     genre: str | None = None
     pays: str | None = None
     region: str | None = None
+    equipes_esport: list[str] | None = None
+
+    @field_validator("equipes_esport")
+    @classmethod
+    def validate_equipes(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None:
+            if len(value) > 3:
+                raise ValueError("Maximum 3 équipes esport.")
+            value = [v.strip() for v in value if v.strip()]
+        return value
 
     @field_validator("pseudo")
     @classmethod
@@ -88,6 +99,10 @@ def update_profile(payload: UpdateProfileRequest, current_user=Depends(_get_curr
                 )
                 if cur.fetchone():
                     raise HTTPException(status_code=409, detail="Email déjà utilisé.")
+
+            # Sérialiser equipes_esport en JSON pour PostgreSQL
+            if "equipes_esport" in fields:
+                fields["equipes_esport"] = json.dumps(fields["equipes_esport"])
 
             set_clause = ", ".join(f"{k} = %s" for k in fields)
             values = list(fields.values()) + [current_user["id"]]

@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -26,7 +27,7 @@ def list_paris(
                 cur.execute(
                     """
                     SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                           pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
                            EXISTS (
                                SELECT 1 FROM user_paris_actifs upa
                                WHERE upa.pari_id = pa.id AND upa.user_id = %s
@@ -44,7 +45,7 @@ def list_paris(
                 cur.execute(
                     """
                     SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                           pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
                            EXISTS (
                                SELECT 1 FROM user_paris_actifs upa
                                WHERE upa.pari_id = pa.id AND upa.user_id = %s
@@ -68,12 +69,19 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
 
     with _db.get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, mise_min, statut FROM paris WHERE id = %s", (pari_id,))
+            cur.execute("SELECT id, mise_min, statut, date_debut FROM paris WHERE id = %s", (pari_id,))
             pari = cur.fetchone()
             if not pari:
                 raise HTTPException(status_code=404, detail="Pari introuvable.")
             if pari["statut"] != "actif":
                 raise HTTPException(status_code=400, detail="Ce pari n'est plus actif.")
+            if pari["date_debut"]:
+                cutoff = pari["date_debut"] - timedelta(minutes=15)
+                if datetime.now() >= cutoff:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Les paris sont fermés (moins de 15 min avant le début).",
+                    )
             if payload.mise < pari["mise_min"]:
                 raise HTTPException(
                     status_code=400,

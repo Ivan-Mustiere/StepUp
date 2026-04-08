@@ -231,6 +231,21 @@ export function getTodaySteps() {
   return request("/api/v1/steps/today");
 }
 
+export function getEquipes(jeu = "") {
+  return request(`/api/v1/equipes${jeu ? `?jeu=${encodeURIComponent(jeu)}` : ""}`);
+}
+
+export function getMyEquipes() {
+  return request("/api/v1/equipes/me");
+}
+
+export function setMyEquipes(equipe_ids) {
+  return request("/api/v1/equipes/me", {
+    method: "PUT",
+    body: JSON.stringify({ equipe_ids }),
+  });
+}
+
 export function dailyReward() {
   return request("/api/v1/auth/daily-reward", { method: "POST" });
 }

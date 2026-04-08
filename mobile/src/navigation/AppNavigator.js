@@ -38,6 +38,9 @@ import {
   sendMessage,
   getConversation,
   sendPrivateMessage,
+  getEquipes,
+  getMyEquipes,
+  setMyEquipes,
 } from "../api/api";
 
 const PAYS = [
@@ -334,7 +337,10 @@ function ParisScreen({ profile, onBetPlaced }) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {parisFiltres.map((p) => (
+        {parisFiltres.map((p) => {
+          const parisFerme = p.date_debut &&
+            new Date() >= new Date(new Date(p.date_debut).getTime() - 15 * 60 * 1000);
+          return (
           <Card key={p.id}>
             <View style={styles.pronosticHeader}>
               <Text style={styles.pronosticCatIcon}>
@@ -348,10 +354,19 @@ function ParisScreen({ profile, onBetPlaced }) {
             <Text style={styles.prediction}>"{p.prediction}"</Text>
             {p.description ? <Text style={styles.pariDesc}>{p.description}</Text> : null}
             <View style={styles.meta}>
-              <Text style={styles.metaText}>{formatDate(p.created_at)}</Text>
+              {p.date_debut && (
+                <Text style={styles.metaText}>
+                  🕐 {new Date(p.date_debut).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+                </Text>
+              )}
             </View>
 
-            {p.statut === "actif" && (
+            {p.statut === "actif" && parisFerme && (
+              <View style={styles.parisFermeRow}>
+                <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
+              </View>
+            )}
+            {p.statut === "actif" && !parisFerme && (
               p.deja_parie ? (
                 <View style={styles.dejaParieRow}>
                   <Text style={styles.dejaParieText}>✓ Vous avez déjà parié</Text>
@@ -407,7 +422,8 @@ function ParisScreen({ profile, onBetPlaced }) {
               )
             )}
           </Card>
-        ))}
+          );
+        })}
 
         {parisFiltres.length === 0 && !loading && (
           <Text style={styles.empty}>Aucun pari disponible.</Text>
@@ -1354,7 +1370,7 @@ function AlertesScreen({ currentUser, onAction }) {
 
 // --- Écran Profil ---
 function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
-  const [section, setSection] = useState(null); // null | "infos" | "password"
+  const [section, setSection] = useState(null); // null | "infos" | "password" | "equipes"
   const [form, setForm] = useState({
     pseudo: profile.pseudo || "",
     age: profile.age ? String(profile.age) : "",
@@ -1363,6 +1379,9 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
     region: profile.region || "",
   });
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [mesEquipes, setMesEquipes] = useState([]);
+  const [toutesEquipes, setToutesEquipes] = useState([]);
+  const [equipesFiltreJeu, setEquipesFiltreJeu] = useState("League of Legends");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -1407,6 +1426,38 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
       await changePassword(pwForm.current, pwForm.next);
       setSuccess("Mot de passe modifié !");
       setPwForm({ current: "", next: "", confirm: "" });
+      setSection(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadEquipes() {
+    try {
+      const [toutes, mes] = await Promise.all([getEquipes(), getMyEquipes()]);
+      setToutesEquipes(toutes);
+      setMesEquipes(mes);
+    } catch (_) {}
+  }
+
+  function toggleEquipe(equipe) {
+    setMesEquipes((prev) => {
+      const already = prev.find((e) => e.id === equipe.id);
+      if (already) return prev.filter((e) => e.id !== equipe.id);
+      if (prev.length >= 3) return prev;
+      return [...prev, equipe];
+    });
+  }
+
+  async function handleSaveEquipes() {
+    setError("");
+    setSuccess("");
+    setSaving(true);
+    try {
+      await setMyEquipes(mesEquipes.map((e) => e.id));
+      setSuccess("Équipes enregistrées !");
       setSection(null);
     } catch (err) {
       setError(err.message);
@@ -1586,6 +1637,90 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
 
             <Button onPress={handleChangePassword} disabled={saving}>
               {saving ? "Modification..." : "Changer le mot de passe"}
+            </Button>
+          </Card>
+        )}
+
+        {/* Section équipes esport */}
+        <TouchableOpacity
+          style={styles.editSection}
+          onPress={() => {
+            const next = section === "equipes" ? null : "equipes";
+            setSection(next);
+            setError(""); setSuccess("");
+            if (next === "equipes") loadEquipes();
+          }}
+        >
+          <Text style={styles.editSectionTitle}>🎮 Mes équipes esport</Text>
+          <Text style={styles.editSectionChevron}>{section === "equipes" ? "▲" : "▼"}</Text>
+        </TouchableOpacity>
+
+        {section === "equipes" && (
+          <Card style={styles.editCard}>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {/* Équipes sélectionnées */}
+            <Text style={styles.equipesHint}>
+              {mesEquipes.length}/3 équipe{mesEquipes.length !== 1 ? "s" : ""} sélectionnée{mesEquipes.length !== 1 ? "s" : ""}
+            </Text>
+            {mesEquipes.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {mesEquipes.map((e) => (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={[styles.equipeChipSelected, { borderColor: e.couleur, backgroundColor: e.couleur + "22" }]}
+                    onPress={() => toggleEquipe(e)}
+                  >
+                    <View style={[styles.equipeChipDot, { backgroundColor: e.couleur }]} />
+                    <Text style={[styles.equipeChipText, { color: e.couleur }]}>{e.nom}</Text>
+                    <Text style={styles.equipeChipRemove}>✕</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* Filtre par jeu */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+              {["League of Legends", "Valorant", "Rocket League"].map((jeu) => (
+                <TouchableOpacity
+                  key={jeu}
+                  style={[styles.filterBtn, equipesFiltreJeu === jeu && styles.filterBtnActive, { marginRight: 6 }]}
+                  onPress={() => setEquipesFiltreJeu(jeu)}
+                >
+                  <Text style={[styles.filterBtnText, equipesFiltreJeu === jeu && styles.filterBtnTextActive]}>
+                    {jeu === "League of Legends" ? "LoL" : jeu === "Rocket League" ? "RL" : jeu}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Liste des équipes */}
+            <View style={styles.equipesGrid}>
+              {toutesEquipes.filter((e) => e.jeu === equipesFiltreJeu).map((e) => {
+                const selected = mesEquipes.some((s) => s.id === e.id);
+                return (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={[
+                      styles.equipeGridItem,
+                      selected && { borderColor: e.couleur, backgroundColor: e.couleur + "18" },
+                      !selected && mesEquipes.length >= 3 && styles.equipeGridItemDisabled,
+                    ]}
+                    onPress={() => toggleEquipe(e)}
+                    disabled={!selected && mesEquipes.length >= 3}
+                  >
+                    <View style={[styles.equipeColorBar, { backgroundColor: e.couleur }]} />
+                    <Text style={[styles.equipeGridNom, selected && { color: e.couleur, fontWeight: "700" }]}>
+                      {e.nom}
+                    </Text>
+                    {selected && <Text style={[styles.equipeGridCheck, { color: e.couleur }]}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Button onPress={handleSaveEquipes} disabled={saving}>
+              {saving ? "Enregistrement..." : "Enregistrer"}
             </Button>
           </Card>
         )}
@@ -2012,6 +2147,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94a3b8",
     fontWeight: "500",
+  },
+  parisFermeRow: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#fef2f2",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  parisFermeText: {
+    fontSize: 12,
+    color: "#dc2626",
+    fontWeight: "600",
+    textAlign: "center",
   },
   dejaParieRow: {
     marginTop: 10,
@@ -2724,6 +2874,72 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
+  },
+  equipesHint: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginBottom: 8,
+  },
+  equipeChipSelected: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    gap: 5,
+  },
+  equipeChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  equipeChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  equipeChipRemove: {
+    fontSize: 11,
+    color: "#94a3b8",
+    marginLeft: 2,
+  },
+  equipesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  equipeGridItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    gap: 8,
+    minWidth: "45%",
+    flex: 1,
+  },
+  equipeGridItemDisabled: {
+    opacity: 0.35,
+  },
+  equipeColorBar: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+  },
+  equipeGridNom: {
+    flex: 1,
+    fontSize: 13,
+    color: "#0f172a",
+    fontWeight: "500",
+  },
+  equipeGridCheck: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   pwHint: {
     fontSize: 11,
