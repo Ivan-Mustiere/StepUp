@@ -2,23 +2,34 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import {
-  API_BASE_URL,
+  dailyReward,
   getMyProfile,
   initAuthTokens,
   login,
   logout,
   register,
 } from "./src/api/api";
+import AppNavigator from "./src/navigation/AppNavigator";
+
+const PAYS = [
+  { label: "France", flag: "🇫🇷" },
+  { label: "États-Unis", flag: "🇺🇸" },
+  { label: "Royaume-Uni", flag: "🇬🇧" },
+  { label: "Allemagne", flag: "🇩🇪" },
+  { label: "Espagne", flag: "🇪🇸" },
+  { label: "Italie", flag: "🇮🇹" },
+];
 
 const initialRegisterForm = {
   pseudo: "",
@@ -26,7 +37,6 @@ const initialRegisterForm = {
   password: "",
   age: "",
   genre: "",
-  region: "",
   pays: "",
 };
 
@@ -36,6 +46,8 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState(initialRegisterForm);
+  const [error, setError] = useState("");
+  const [rewardData, setRewardData] = useState(null);
 
   const title = useMemo(
     () => (isLoginMode ? "Connexion" : "Inscription"),
@@ -48,6 +60,7 @@ export default function App() {
         await initAuthTokens();
         const me = await getMyProfile();
         setProfile(me);
+        claimDailyReward();
       } catch (_) {
         // Pas de session active.
       } finally {
@@ -56,22 +69,34 @@ export default function App() {
     })();
   }, []);
 
-  async function onLogin() {
+  async function claimDailyReward() {
     try {
-      setLoading(true);
+      const result = await dailyReward();
+      if (!result.already_claimed) {
+        setRewardData(result);
+      }
+    } catch (_) {}
+  }
+
+  async function onLogin() {
+    setError("");
+    setLoading(true);
+    try {
       await login(loginForm);
       const me = await getMyProfile();
       setProfile(me);
-    } catch (error) {
-      Alert.alert("Erreur connexion", String(error.message || error));
+      claimDailyReward();
+    } catch (err) {
+      setError(String(err.message || err));
     } finally {
       setLoading(false);
     }
   }
 
   async function onRegister() {
+    setError("");
+    setLoading(true);
     try {
-      setLoading(true);
       const payload = {
         ...registerForm,
         age: registerForm.age ? Number(registerForm.age) : null,
@@ -81,45 +106,75 @@ export default function App() {
       const me = await getMyProfile();
       setProfile(me);
       setRegisterForm(initialRegisterForm);
-    } catch (error) {
-      Alert.alert("Erreur inscription", String(error.message || error));
+      claimDailyReward();
+    } catch (err) {
+      setError(String(err.message || err));
     } finally {
       setLoading(false);
     }
   }
 
   async function onLogout() {
+    setLoading(true);
     try {
-      setLoading(true);
       await logout();
       setProfile(null);
+      setError("");
     } finally {
       setLoading(false);
     }
   }
 
+  async function refreshProfile() {
+    try {
+      const me = await getMyProfile();
+      setProfile(me);
+    } catch (_) {}
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#2563eb" />
       </SafeAreaView>
     );
   }
 
   if (profile) {
     return (
-      <SafeAreaView style={styles.container}>
+      <>
         <StatusBar style="dark" />
-        <View style={styles.card}>
-          <Text style={styles.h1}>Bienvenue {profile.pseudo}</Text>
-          <Text style={styles.meta}>Email: {profile.email}</Text>
-          <Text style={styles.meta}>Coins: {profile.coins}</Text>
-          <Text style={styles.meta}>XP: {profile.xp_total}</Text>
-          <Text style={styles.meta}>API: {API_BASE_URL}</Text>
-          <View style={styles.spacer} />
-          <Button title="Se deconnecter" onPress={onLogout} />
-        </View>
-      </SafeAreaView>
+        <AppNavigator
+          profile={profile}
+          onLogout={onLogout}
+          onRefreshProfile={refreshProfile}
+        />
+        <Modal
+          visible={!!rewardData}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRewardData(null)}
+        >
+          <View style={styles.rewardOverlay}>
+            <View style={styles.rewardCard}>
+              <Text style={styles.rewardTitle}>Récompense journalière 🎁</Text>
+              <Text style={styles.rewardCoins}>+{rewardData?.coins_gagnes} 🪙</Text>
+              <Text style={styles.rewardStreak}>
+                🔥 Streak : {rewardData?.strick} jour{rewardData?.strick > 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.rewardTotal}>
+                Total : {rewardData?.coins_total} 🪙
+              </Text>
+              <TouchableOpacity
+                style={styles.rewardBtn}
+                onPress={() => { setRewardData(null); refreshProfile(); }}
+              >
+                <Text style={styles.rewardBtnText}>Super !</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </>
     );
   }
 
@@ -127,21 +182,30 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.h1}>StepUp Mobile</Text>
-        <Text style={styles.subtitle}>Backend: {API_BASE_URL}</Text>
+        <Text style={styles.h1}>StepUp</Text>
+
         <View style={styles.switchRow}>
-          <Button
-            title="Connexion"
-            onPress={() => setIsLoginMode(true)}
-            color={isLoginMode ? "#2563eb" : "#94a3b8"}
-          />
-          <Button
-            title="Inscription"
-            onPress={() => setIsLoginMode(false)}
-            color={!isLoginMode ? "#2563eb" : "#94a3b8"}
-          />
+          <TouchableOpacity
+            style={[styles.switchBtn, isLoginMode && styles.switchBtnActive]}
+            onPress={() => { setIsLoginMode(true); setError(""); }}
+          >
+            <Text style={[styles.switchBtnText, isLoginMode && styles.switchBtnTextActive]}>
+              Connexion
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.switchBtn, !isLoginMode && styles.switchBtnActive]}
+            onPress={() => { setIsLoginMode(false); setError(""); }}
+          >
+            <Text style={[styles.switchBtnText, !isLoginMode && styles.switchBtnTextActive]}>
+              Inscription
+            </Text>
+          </TouchableOpacity>
         </View>
+
         <Text style={styles.h2}>{title}</Text>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {isLoginMode ? (
           <View style={styles.form}>
@@ -151,20 +215,18 @@ export default function App() {
               keyboardType="email-address"
               style={styles.input}
               value={loginForm.email}
-              onChangeText={(value) =>
-                setLoginForm((prev) => ({ ...prev, email: value }))
-              }
+              onChangeText={(v) => setLoginForm((p) => ({ ...p, email: v }))}
             />
             <TextInput
               placeholder="Mot de passe"
               secureTextEntry
               style={styles.input}
               value={loginForm.password}
-              onChangeText={(value) =>
-                setLoginForm((prev) => ({ ...prev, password: value }))
-              }
+              onChangeText={(v) => setLoginForm((p) => ({ ...p, password: v }))}
             />
-            <Button title="Se connecter" onPress={onLogin} />
+            <TouchableOpacity style={styles.btn} onPress={onLogin}>
+              <Text style={styles.btnText}>Se connecter</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.form}>
@@ -173,9 +235,7 @@ export default function App() {
               autoCapitalize="none"
               style={styles.input}
               value={registerForm.pseudo}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, pseudo: value }))
-              }
+              onChangeText={(v) => setRegisterForm((p) => ({ ...p, pseudo: v }))}
             />
             <TextInput
               placeholder="Email"
@@ -183,53 +243,52 @@ export default function App() {
               keyboardType="email-address"
               style={styles.input}
               value={registerForm.email}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, email: value }))
-              }
+              onChangeText={(v) => setRegisterForm((p) => ({ ...p, email: v }))}
             />
             <TextInput
               placeholder="Mot de passe"
               secureTextEntry
               style={styles.input}
               value={registerForm.password}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, password: value }))
-              }
+              onChangeText={(v) => setRegisterForm((p) => ({ ...p, password: v }))}
             />
             <TextInput
               placeholder="Age"
               keyboardType="number-pad"
               style={styles.input}
               value={registerForm.age}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, age: value }))
-              }
+              onChangeText={(v) => setRegisterForm((p) => ({ ...p, age: v }))}
             />
-            <TextInput
-              placeholder="Genre"
-              style={styles.input}
-              value={registerForm.genre}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, genre: value }))
-              }
-            />
-            <TextInput
-              placeholder="Region"
-              style={styles.input}
-              value={registerForm.region}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, region: value }))
-              }
-            />
-            <TextInput
-              placeholder="Pays"
-              style={styles.input}
-              value={registerForm.pays}
-              onChangeText={(value) =>
-                setRegisterForm((prev) => ({ ...prev, pays: value }))
-              }
-            />
-            <Button title="S'inscrire" onPress={onRegister} />
+            <View style={styles.selectRow}>
+              {["homme", "femme", "autre"].map((g) => (
+                <TouchableOpacity
+                  key={g}
+                  style={[styles.selectOption, registerForm.genre === g && styles.selectOptionActive]}
+                  onPress={() => setRegisterForm((p) => ({ ...p, genre: g }))}
+                >
+                  <Text style={[styles.selectOptionText, registerForm.genre === g && styles.selectOptionTextActive]}>
+                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>Pays</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {PAYS.map(({ label, flag }) => (
+                <TouchableOpacity
+                  key={label}
+                  style={[styles.chip, registerForm.pays === label && styles.chipActive]}
+                  onPress={() => setRegisterForm((prev) => ({ ...prev, pays: label }))}
+                >
+                  <Text style={[styles.chipText, registerForm.pays === label && styles.chipTextActive]}>
+                    {label} {flag}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.btn} onPress={onRegister}>
+              <Text style={styles.btnText}>S'inscrire</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -246,54 +305,192 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#f8fafc",
   },
   scroll: {
-    padding: 20,
-    gap: 12,
-  },
-  card: {
-    margin: 20,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 8,
+    padding: 24,
   },
   h1: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 32,
+    fontWeight: "800",
     color: "#0f172a",
+    textAlign: "center",
+    marginBottom: 24,
+    marginTop: 16,
   },
   h2: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1e293b",
-  },
-  subtitle: {
-    color: "#475569",
-  },
-  meta: {
-    color: "#334155",
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 16,
+    textAlign: "center",
   },
   switchRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    marginVertical: 8,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 24,
+  },
+  switchBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  switchBtnActive: {
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  switchBtnText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#94a3b8",
+  },
+  switchBtnTextActive: {
+    color: "#0f172a",
+    fontWeight: "700",
   },
   form: {
-    gap: 10,
+    gap: 12,
   },
   input: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#cbd5e1",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
   },
-  spacer: {
-    height: 8,
+  selectRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  selectOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+  },
+  selectOptionActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  selectOptionText: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "500",
+  },
+  selectOptionTextActive: {
+    color: "#ffffff",
+  },
+  btn: {
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  btnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  error: {
+    color: "#dc2626",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 6,
+  },
+  chipsScroll: {
+    marginBottom: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
+    marginRight: 8,
+  },
+  chipActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  chipText: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "500",
+  },
+  chipTextActive: {
+    color: "#ffffff",
+  },
+  rewardOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rewardCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 32,
+    width: "80%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  rewardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  rewardCoins: {
+    fontSize: 42,
+    fontWeight: "800",
+    color: "#d97706",
+    marginBottom: 8,
+  },
+  rewardStreak: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ea580c",
+    marginBottom: 4,
+  },
+  rewardTotal: {
+    fontSize: 13,
+    color: "#64748b",
+    marginBottom: 24,
+  },
+  rewardBtn: {
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+  },
+  rewardBtnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

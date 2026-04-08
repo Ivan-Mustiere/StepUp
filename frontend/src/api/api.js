@@ -207,4 +207,8 @@ export function rejectFriendRequest(requestId) {
   });
 }
 
+export function removeFriend(friendId) {
+  return request(`/api/v1/friends/${friendId}`, { method: "DELETE" });
+}
+
 export { API_BASE_URL };

@@ -136,6 +136,24 @@ def cancel_friend_request(request_id: int, current_user=Depends(_get_current_use
             return {"status": "cancelled"}
 
 
+@router.delete("/{friend_id}")
+def remove_friend(friend_id: int, current_user=Depends(_get_current_user)):
+    with _db.get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM user_friends
+                WHERE (user_id = %s AND friend_user_id = %s)
+                   OR (user_id = %s AND friend_user_id = %s)
+                """,
+                (current_user["id"], friend_id, friend_id, current_user["id"]),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Ami introuvable.")
+            conn.commit()
+            return {"status": "removed"}
+
+
 @router.get("/requests/incoming")
 def list_incoming_friend_requests(current_user=Depends(_get_current_user)):
     with _db.get_db() as conn:

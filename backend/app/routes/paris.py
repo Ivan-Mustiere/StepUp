@@ -73,36 +73,75 @@ def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get_curre
                 )
 
             cur.execute(
-                "SELECT coins FROM users WHERE id = %s FOR UPDATE",
+                "SELECT coins, coins_en_jeu, gems FROM users WHERE id = %s FOR UPDATE",
                 (current_user["id"],),
             )
             user = cur.fetchone()
+
+            if user["gems"] < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Il vous faut au moins 1 💎 Gem pour parier. Marchez pour en gagner !",
+                )
             if user["coins"] < payload.mise:
                 raise HTTPException(status_code=400, detail="Coins insuffisants.")
 
+            # Vérifier qu'il ne parie pas déjà sur ce match
             cur.execute(
-                "UPDATE users SET coins = coins - %s WHERE id = %s",
-                (payload.mise, current_user["id"]),
+                "SELECT 1 FROM user_paris_actifs WHERE user_id = %s AND pari_id = %s",
+                (current_user["id"], pari_id),
             )
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Vous avez déjà parié sur ce match.")
+
+            # Déduire 1 gem + bloquer les coins + gagner XP
+            xp_gagne = 10 + min(payload.mise // 50, 40)  # 10 XP base + 1 XP par 50 coins misés (max +40)
+            cur.execute(
+                """
+                UPDATE users
+                SET coins = coins - %s,
+                    coins_en_jeu = coins_en_jeu + %s,
+                    gems = gems - 1,
+                    xp_total = xp_total + %s,
+                    xp_semaine = xp_semaine + %s
+                WHERE id = %s
+                """,
+                (payload.mise, payload.mise, xp_gagne, xp_gagne, current_user["id"]),
+            )
+
+            # Enregistrer le pari actif
+            cur.execute(
+                """
+                INSERT INTO user_paris_actifs (user_id, pari_id, mise)
+                VALUES (%s, %s, %s)
+                RETURNING id
+                """,
+                (current_user["id"], pari_id, payload.mise),
+            )
+
+            # Historique
             cur.execute(
                 """
                 INSERT INTO user_historique_parie (user_id, paris_detail)
                 VALUES (%s, %s)
-                RETURNING id
                 """,
                 (
                     current_user["id"],
-                    json.dumps({"pari_id": pari_id, "mise": payload.mise}),
+                    json.dumps({"pari_id": pari_id, "mise": payload.mise, "statut": "en_cours"}),
                 ),
             )
-            record = cur.fetchone()
+
             conn.commit()
 
-            cur.execute("SELECT coins FROM users WHERE id = %s", (current_user["id"],))
+            cur.execute(
+                "SELECT coins, coins_en_jeu, gems FROM users WHERE id = %s",
+                (current_user["id"],),
+            )
             updated = cur.fetchone()
 
             return {
-                "historique_id": record["id"],
                 "mise": payload.mise,
                 "coins_restants": updated["coins"],
+                "coins_en_jeu": updated["coins_en_jeu"],
+                "gems_restants": updated["gems"],
             }

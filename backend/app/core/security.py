@@ -60,7 +60,8 @@ def _get_current_user(token: str = Depends(oauth2_scheme)):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, pseudo, email, coins, xp_total, vip, date_creation, is_admin
+                SELECT id, pseudo, email, age, genre, pays, region,
+                       coins, coins_en_jeu, gems, xp_total, vip, date_creation, is_admin
                 FROM users
                 WHERE id = %s
                 """,

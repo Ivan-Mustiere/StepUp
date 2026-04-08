@@ -1,5 +1,8 @@
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "http://10.0.2.2:8000";
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (typeof window !== "undefined" && window.location
+    ? "http://localhost:8000"
+    : "http://10.0.2.2:8000");
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -85,16 +88,16 @@ export async function refreshSession() {
     return false;
   }
   try {
-    const tokens = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    if (!tokens.ok) {
+    if (!response.ok) {
       await clearSession();
       return false;
     }
-    const payload = await tokens.json();
+    const payload = await response.json();
     await persistTokens(payload);
     return true;
   } catch (_) {
@@ -122,12 +125,128 @@ export function getMyProfile() {
   return request("/api/v1/auth/me");
 }
 
-export function getHealth() {
-  return request("/health");
+export function getPronostics(queryString = "") {
+  return request(`/api/v1/pronostics${queryString ? `?${queryString}` : ""}`);
 }
 
-export function getApiMessage() {
-  return request("/api/v1/message");
+export function createPronostic(payload) {
+  return request("/api/v1/pronostics", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getUserProfile(userId) {
+  return request(`/api/v1/users/${userId}`);
+}
+
+export function getCommunautes() {
+  return request("/api/v1/communautes");
+}
+
+export function joinCommunaute(id) {
+  return request(`/api/v1/communautes/${id}/rejoindre`, { method: "POST" });
+}
+
+export function leaveCommunaute(id) {
+  return request(`/api/v1/communautes/${id}/quitter`, { method: "DELETE" });
+}
+
+export function getClassement(communauteId) {
+  return request(`/api/v1/communautes/${communauteId}/classement`);
+}
+
+export function getMessages(communauteId) {
+  return request(`/api/v1/communautes/${communauteId}/messages`);
+}
+
+export function sendMessage(communauteId, contenu) {
+  return request(`/api/v1/communautes/${communauteId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ contenu }),
+  });
+}
+
+export function getConversation(friendId) {
+  return request(`/api/v1/messages/${friendId}`);
+}
+
+export function sendPrivateMessage(friendId, contenu) {
+  return request(`/api/v1/messages/${friendId}`, {
+    method: "POST",
+    body: JSON.stringify({ contenu }),
+  });
+}
+
+export function getParis(queryString = "") {
+  return request(`/api/v1/paris${queryString ? `?${queryString}` : ""}`);
+}
+
+export function placeBet(pariId, mise) {
+  return request(`/api/v1/paris/${pariId}/miser`, {
+    method: "POST",
+    body: JSON.stringify({ mise }),
+  });
+}
+
+export function getFriends() {
+  return request("/api/v1/friends");
+}
+
+export function getFriendRequestsIncoming() {
+  return request("/api/v1/friends/requests/incoming");
+}
+
+export function sendFriendRequest(friendUserId) {
+  return request("/api/v1/friends/requests", {
+    method: "POST",
+    body: JSON.stringify({ friend_user_id: friendUserId }),
+  });
+}
+
+export function acceptFriendRequest(requestId) {
+  return request(`/api/v1/friends/requests/${requestId}/accept`, {
+    method: "POST",
+  });
+}
+
+export function rejectFriendRequest(requestId) {
+  return request(`/api/v1/friends/requests/${requestId}/reject`, {
+    method: "POST",
+  });
+}
+
+export function removeFriend(friendId) {
+  return request(`/api/v1/friends/${friendId}`, { method: "DELETE" });
+}
+
+export function syncSteps(pas) {
+  return request("/api/v1/steps", {
+    method: "POST",
+    body: JSON.stringify({ pas }),
+  });
+}
+
+export function getTodaySteps() {
+  return request("/api/v1/steps/today");
+}
+
+export function dailyReward() {
+  return request("/api/v1/auth/daily-reward", { method: "POST" });
+}
+
+export function updateProfile(payload) {
+  return request("/api/v1/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function changePassword(currentPassword, newPassword) {
+  return request("/api/v1/users/me/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
 }
 
 export { API_BASE_URL };

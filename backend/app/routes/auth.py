@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
@@ -85,7 +85,13 @@ class UserResponse(BaseModel):
     id: int
     pseudo: str
     email: str
+    age: int | None = None
+    genre: str | None = None
+    pays: str | None = None
+    region: str | None = None
     coins: int
+    coins_en_jeu: int = 0
+    gems: int = 0
     xp_total: int
     vip: bool
     date_creation: datetime
@@ -149,7 +155,7 @@ def login(request: Request, payload: LoginRequest):
     with _db.get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, password_hash FROM users WHERE email = %s", (payload.email,)
+                "SELECT id, password_hash FROM users WHERE email = %s", (payload.email.strip().lower(),)
             )
             row = cur.fetchone()
             if not row:
@@ -220,13 +226,76 @@ def logout(payload: RefreshTokenRequest):
             return {"revoked": cur.rowcount > 0}
 
 
+@router.post("/daily-reward")
+def daily_reward(current_user=Depends(_get_current_user)):
+    """Récompense de connexion journalière. Appeler une fois par session."""
+    today = date.today()
+    yesterday = date.fromordinal(today.toordinal() - 1)
+
+    with _db.get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT derniere_recompense_date, strick, coins FROM users WHERE id = %s FOR UPDATE",
+                (current_user["id"],),
+            )
+            row = cur.fetchone()
+            derniere = row["derniere_recompense_date"]
+
+            if derniere == today:
+                return {
+                    "already_claimed": True,
+                    "coins_gagnes": 0,
+                    "strick": row["strick"],
+                    "coins_total": row["coins"],
+                }
+
+            # Calcul du streak
+            if derniere == yesterday:
+                nouveau_strick = row["strick"] + 1
+            else:
+                nouveau_strick = 1  # reset si jour manqué
+
+            # Récompense : 10 coins de base + 2 par jour de streak (max +30)
+            bonus_streak = min((nouveau_strick - 1) * 2, 30)
+            coins_gagnes = 10 + bonus_streak
+
+            cur.execute(
+                """
+                UPDATE users
+                SET coins = coins + %s,
+                    strick = %s,
+                    derniere_recompense_date = %s,
+                    derniere_utilisation = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (coins_gagnes, nouveau_strick, today, current_user["id"]),
+            )
+            conn.commit()
+
+            cur.execute("SELECT coins FROM users WHERE id = %s", (current_user["id"],))
+            updated = cur.fetchone()
+
+            return {
+                "already_claimed": False,
+                "coins_gagnes": coins_gagnes,
+                "strick": nouveau_strick,
+                "coins_total": updated["coins"],
+            }
+
+
 @router.get("/me", response_model=UserResponse)
 def me(current_user=Depends(_get_current_user)):
     return {
         "id": current_user["id"],
         "pseudo": current_user["pseudo"],
         "email": current_user["email"],
+        "age": current_user["age"],
+        "genre": current_user["genre"],
+        "pays": current_user["pays"],
+        "region": current_user["region"],
         "coins": current_user["coins"],
+        "coins_en_jeu": current_user["coins_en_jeu"],
+        "gems": current_user["gems"],
         "xp_total": current_user["xp_total"],
         "vip": current_user["vip"],
         "date_creation": current_user["date_creation"],
