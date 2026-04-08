@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -63,8 +64,6 @@ const TABS = [
   { id: "communautes", label: "Commu" },
   { id: "amis",        label: "Amis" },
   { id: "boutique",    label: "Boutique" },
-  { id: "alertes",     label: "Alertes" },
-  { id: "profil",      label: "Profil" },
 ];
 
 const TAB_NAMES = {
@@ -80,13 +79,29 @@ const TAB_NAMES = {
 export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
   const [tab, setTab] = useState("paris");
   const [currentProfile, setCurrentProfile] = useState(profile);
+  const [alertesCount, setAlertesCount] = useState(0);
+  const [alertesVisible, setAlertesVisible] = useState(false);
 
   useEffect(() => {
     setCurrentProfile(profile);
   }, [profile]);
 
+  useEffect(() => {
+    loadAlertesCount();
+    const interval = setInterval(loadAlertesCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadAlertesCount() {
+    try {
+      const reqs = await getFriendRequestsIncoming();
+      setAlertesCount(Array.isArray(reqs) ? reqs.length : 0);
+    } catch (_) {}
+  }
+
   async function handleRefresh() {
     await onRefreshProfile();
+    loadAlertesCount();
   }
 
   function renderContent() {
@@ -98,11 +113,9 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
       case "communautes":
         return <CommunautesScreen profile={currentProfile} />;
       case "amis":
-        return <AmisScreen currentUser={currentProfile} />;
+        return <AmisScreen currentUser={currentProfile} onAction={loadAlertesCount} />;
       case "boutique":
         return <BoutiqueScreen profile={currentProfile} onRefreshProfile={onRefreshProfile} />;
-      case "alertes":
-        return <AlertesScreen currentUser={currentProfile} />;
       case "profil":
         return <ProfilScreen profile={currentProfile} onLogout={onLogout} onRefreshProfile={onRefreshProfile} />;
       default:
@@ -110,20 +123,76 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
     }
   }
 
+  const pseudo = currentProfile.pseudo ?? "?";
+  const avatar = currentProfile.avatar;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        {/* Gauche : monnaies */}
         <View style={styles.headerLeft}>
           <Text style={styles.headerStat}>💎 {currentProfile.gems ?? 0}</Text>
           <Text style={styles.headerStat}>🪙 {currentProfile.coins}</Text>
         </View>
+
+        {/* Centre : nom de la page */}
         <Text style={styles.headerBrand}>{TAB_NAMES[tab]}</Text>
+
+        {/* Droite : alertes + avatar */}
         <View style={styles.headerRight}>
-          <Text style={styles.headerStat}>⭐ {currentProfile.xp_total ?? 0}</Text>
+          {/* Cloche alertes */}
+          <TouchableOpacity style={styles.headerIconBtn} onPress={() => setAlertesVisible(true)}>
+            <Text style={styles.headerIconEmoji}>🔔</Text>
+            {alertesCount > 0 && (
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>
+                  {alertesCount > 9 ? "9+" : alertesCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Avatar profil */}
+          <TouchableOpacity style={styles.headerAvatarBtn} onPress={() => setTab("profil")}>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.headerAvatar} />
+            ) : (
+              <View style={styles.headerAvatarFallback}>
+                <Text style={styles.headerAvatarText}>
+                  {pseudo[0].toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.content}>{renderContent()}</View>
+
+      {/* Modal Alertes */}
+      <Modal
+        visible={alertesVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAlertesVisible(false)}
+      >
+        <View style={styles.alertesOverlay}>
+          <TouchableOpacity style={styles.alertesDismiss} onPress={() => setAlertesVisible(false)} />
+          <View style={styles.alertesSheet}>
+            <View style={styles.alertesSheetHandle} />
+            <View style={styles.alertesSheetHeader}>
+              <Text style={styles.alertesSheetTitle}>🔔 Alertes</Text>
+              <TouchableOpacity onPress={() => setAlertesVisible(false)}>
+                <Text style={styles.alertesSheetClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <AlertesScreen
+              currentUser={currentProfile}
+              onAction={() => { loadAlertesCount(); }}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.tabBar}>
         {TABS.map((t) => {
@@ -149,9 +218,16 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
 const STATUTS_PARIS = ["", "actif", "ferme", "regle"];
 const LIMIT = 20;
 
+const CATEGORIES_PARIS = [
+  { id: "League of Legends",  label: "LoL",      icon: null,  source: require("../assets/images/League_Of_Legende.png") },
+  { id: "Valorant",           label: "Valorant", icon: null,  source: require("../assets/images/Valorant.png") },
+  { id: "Rocket League",      label: "RL",       icon: null,  source: require("../assets/images/Rocket_League.png") },
+];
+
 function ParisScreen({ profile, onBetPlaced }) {
   const [paris, setParis] = useState([]);
   const [statut, setStatut] = useState("actif");
+  const [categorie, setCategorie] = useState("League of Legends");
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -188,6 +264,8 @@ function ParisScreen({ profile, onBetPlaced }) {
     load(true);
   }, [statut]);
 
+  const parisFiltres = paris.filter((p) => p.categorie === categorie);
+
   async function handleBet(pariId) {
     setBetError("");
     setBetSuccess(null);
@@ -204,9 +282,18 @@ function ParisScreen({ profile, onBetPlaced }) {
 
   function openBet(pariId) {
     setBettingId(pariId);
-    setMise("");
+    const coins = profile?.coins ?? 0;
+    setMise(String(Math.min(coins, 150)));
     setBetError("");
     setBetSuccess(null);
+  }
+
+  const maxCoins = profile?.coins ?? 0;
+
+  function adjustMise(delta) {
+    const current = parseInt(mise, 10) || 0;
+    const next = Math.min(maxCoins, Math.max(10, current + delta));
+    setMise(String(next));
   }
 
   return (
@@ -217,6 +304,25 @@ function ParisScreen({ profile, onBetPlaced }) {
         </View>
       )}
 
+      {/* Nav : catégorie / jeu */}
+      <View style={styles.catBar}>
+        {CATEGORIES_PARIS.map((c) => (
+          <TouchableOpacity
+            key={c.id}
+            style={[styles.catBtn, categorie === c.id && styles.catBtnActive]}
+            onPress={() => setCategorie(c.id)}
+          >
+            {c.source
+              ? <Image source={c.source} style={styles.catBtnImage} resizeMode="contain" />
+              : <Text style={styles.catBtnIcon}>{c.icon}</Text>
+            }
+            <Text style={[styles.catBtnLabel, categorie === c.id && styles.catBtnLabelActive]}>
+              {c.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {betSuccess && (
           <View style={styles.betSuccess}>
@@ -226,30 +332,14 @@ function ParisScreen({ profile, onBetPlaced }) {
           </View>
         )}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterBar}
-          contentContainerStyle={styles.filterBarContent}
-        >
-          {STATUTS_PARIS.map((s) => (
-            <TouchableOpacity
-              key={s}
-              style={[styles.filterBtn, statut === s && styles.filterBtnActive]}
-              onPress={() => setStatut(s)}
-            >
-              <Text style={[styles.filterBtnText, statut === s && styles.filterBtnTextActive]}>
-                {s === "" ? "Tous" : s.charAt(0).toUpperCase() + s.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {paris.map((p) => (
+        {parisFiltres.map((p) => (
           <Card key={p.id}>
             <View style={styles.pronosticHeader}>
+              <Text style={styles.pronosticCatIcon}>
+                {CATEGORIES_PARIS.find((c) => c.id === p.categorie)?.icon ?? "🎮"}
+              </Text>
               <Text style={styles.pronosticTitre} numberOfLines={1}>{p.titre}</Text>
               <View style={[styles.badge, { backgroundColor: p.statut === "actif" ? "#16a34a" : "#64748b" }]}>
                 <Text style={styles.badgeText}>{p.statut}</Text>
@@ -258,25 +348,52 @@ function ParisScreen({ profile, onBetPlaced }) {
             <Text style={styles.prediction}>"{p.prediction}"</Text>
             {p.description ? <Text style={styles.pariDesc}>{p.description}</Text> : null}
             <View style={styles.meta}>
-              {p.cote ? <Text style={styles.metaText}>Cote : {p.cote}</Text> : null}
-              <Text style={styles.metaText}>Mise min : {p.mise_min} 🪙</Text>
               <Text style={styles.metaText}>{formatDate(p.created_at)}</Text>
             </View>
 
             {p.statut === "actif" && (
-              bettingId === p.id ? (
+              p.deja_parie ? (
+                <View style={styles.dejaParieRow}>
+                  <Text style={styles.dejaParieText}>✓ Vous avez déjà parié</Text>
+                </View>
+              ) : bettingId === p.id ? (
                 <View style={styles.betForm}>
-                  <View style={styles.betCost}>
-                    <Text style={styles.betCostText}>💎 1 gem requis · 🔒 coins bloqués pendant le pari</Text>
-                  </View>
                   {betError ? <Text style={styles.error}>{betError}</Text> : null}
-                  <TextInput
-                    style={styles.input}
-                    placeholder={`Mise (min ${p.mise_min || 1} coins)`}
-                    keyboardType="number-pad"
-                    value={mise}
-                    onChangeText={setMise}
-                  />
+
+                  {/* Zone mise centrale */}
+                  <View style={styles.betMiseZone}>
+                    <View style={styles.betAdjustRow}>
+                      <TouchableOpacity style={styles.betAdjBtn} onPress={() => adjustMise(-100)}>
+                        <Text style={styles.betAdjBtnText}>-100</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.betAdjBtn} onPress={() => adjustMise(-10)}>
+                        <Text style={styles.betAdjBtnText}>-10</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.betMiseInput}
+                        keyboardType="number-pad"
+                        value={mise}
+                        onChangeText={(v) => {
+                          const n = parseInt(v, 10);
+                          if (!v) { setMise(""); return; }
+                          if (!isNaN(n)) setMise(String(Math.min(maxCoins, n)));
+                        }}
+                        onBlur={() => {
+                          const n = parseInt(mise, 10);
+                          if (isNaN(n) || n < 10) setMise("10");
+                        }}
+                        textAlign="center"
+                      />
+                      <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => adjustMise(10)}>
+                        <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+10</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.betAdjBtn, styles.betAdjBtnPlus]} onPress={() => adjustMise(100)}>
+                        <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+100</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.betMiseLabel}>🪙 coins</Text>
+                  </View>
+
                   <View style={styles.actions}>
                     <Button onPress={() => handleBet(p.id)}>Confirmer</Button>
                     <Button variant="secondary" onPress={() => setBettingId(null)}>Annuler</Button>
@@ -292,7 +409,7 @@ function ParisScreen({ profile, onBetPlaced }) {
           </Card>
         ))}
 
-        {paris.length === 0 && !loading && (
+        {parisFiltres.length === 0 && !loading && (
           <Text style={styles.empty}>Aucun pari disponible.</Text>
         )}
         {loading && <ActivityIndicator style={styles.loader} />}
@@ -727,13 +844,16 @@ function AmisScreen({ currentUser }) {
   const [error, setError] = useState("");
   const [profileModal, setProfileModal] = useState(null);
   const [openPrivateChat, setOpenPrivateChat] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(null); // { id, pseudo }
 
-  async function handleRemoveFriend(friendId) {
+  async function doRemoveFriend() {
     try {
-      await removeFriend(friendId);
+      await removeFriend(confirmRemove.id);
+      setConfirmRemove(null);
       loadData();
     } catch (err) {
       setError(err.message);
+      setConfirmRemove(null);
     }
   }
 
@@ -891,13 +1011,46 @@ function AmisScreen({ currentUser }) {
                     <Text style={styles.friendMeta}>{f.xp_total} XP · {f.coins} coins</Text>
                   </TouchableOpacity>
                   <Button onPress={() => setOpenPrivateChat(f)}>💬</Button>
-                  <Button variant="danger" onPress={() => handleRemoveFriend(f.id)}>✕</Button>
+                  <Button variant="danger" onPress={() => setConfirmRemove({ id: f.id, pseudo: f.pseudo })}>✕</Button>
                 </View>
               </Card>
             ))
           )}
         </View>
       </ScrollView>
+
+      {/* Modal confirmation suppression ami */}
+      <Modal
+        visible={!!confirmRemove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmRemove(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Supprimer un ami</Text>
+            <Text style={styles.confirmMsg}>
+              Voulez-vous retirer{" "}
+              <Text style={{ fontWeight: "700" }}>{confirmRemove?.pseudo}</Text>{" "}
+              de votre liste d'amis ?
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmBtnCancel}
+                onPress={() => setConfirmRemove(null)}
+              >
+                <Text style={styles.confirmBtnCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmBtnDelete}
+                onPress={doRemoveFriend}
+              >
+                <Text style={styles.confirmBtnDeleteText}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1110,7 +1263,7 @@ function BoutiqueScreen({ profile }) {
 }
 
 // --- Alertes ---
-function AlertesScreen({ currentUser }) {
+function AlertesScreen({ currentUser, onAction }) {
   const [demandesAmis, setDemandesAmis] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1133,6 +1286,7 @@ function AlertesScreen({ currentUser }) {
     try {
       await acceptFriendRequest(requestId);
       loadAlertes();
+      onAction?.();
     } catch (err) {
       setError(err.message);
     }
@@ -1142,6 +1296,7 @@ function AlertesScreen({ currentUser }) {
     try {
       await rejectFriendRequest(requestId);
       loadAlertes();
+      onAction?.();
     } catch (err) {
       setError(err.message);
     }
@@ -1472,9 +1627,62 @@ const styles = StyleSheet.create({
     minWidth: 70,
   },
   headerRight: {
-    flexDirection: "column",
-    alignItems: "flex-end",
-    minWidth: 70,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 80,
+    justifyContent: "flex-end",
+  },
+  headerIconBtn: {
+    position: "relative",
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerIconEmoji: {
+    fontSize: 22,
+  },
+  headerBadge: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    backgroundColor: "#dc2626",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  headerBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  headerAvatarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  headerAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerAvatarText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
   },
   headerStat: {
     fontSize: 13,
@@ -1556,13 +1764,17 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  // Filter bar
+  // Filter bar (statut)
   filterBar: {
-    marginBottom: 12,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   filterBarContent: {
     gap: 8,
-    paddingBottom: 4,
+    alignItems: "center",
   },
   filterBtn: {
     paddingHorizontal: 14,
@@ -1583,6 +1795,50 @@ const styles = StyleSheet.create({
   },
   filterBtnTextActive: {
     color: "#ffffff",
+  },
+  // Category bar (sport/jeu)
+  catBar: {
+    flexDirection: "row",
+    backgroundColor: "#f8fafc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  catBarContent: {},
+  catBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    backgroundColor: "transparent",
+  },
+  catBtnActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#2563eb",
+  },
+  catBtnIcon: {
+    fontSize: 22,
+    marginBottom: 2,
+  },
+  catBtnImage: {
+    width: 28,
+    height: 28,
+    marginBottom: 2,
+  },
+  catBtnLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  catBtnLabelActive: {
+    color: "#2563eb",
+  },
+  pronosticCatIcon: {
+    fontSize: 18,
+    marginRight: 6,
   },
   // Common
   error: {
@@ -1700,17 +1956,77 @@ const styles = StyleSheet.create({
   },
   betForm: {
     marginTop: 10,
-    gap: 8,
-  },
-  betCost: {
-    backgroundColor: "#fef9c3",
-    borderRadius: 6,
-    padding: 8,
+    gap: 10,
+    alignItems: "center",
   },
   betCostText: {
     fontSize: 12,
     color: "#92400e",
     fontWeight: "500",
+    backgroundColor: "#fef9c3",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: "center",
+  },
+  betMiseZone: {
+    alignItems: "center",
+    gap: 4,
+  },
+  betAdjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  betAdjBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  betAdjBtnPlus: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+  },
+  betAdjBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#dc2626",
+  },
+  betAdjBtnTextPlus: {
+    color: "#2563eb",
+  },
+  betMiseInput: {
+    width: 90,
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#0f172a",
+    borderBottomWidth: 2,
+    borderBottomColor: "#2563eb",
+    paddingVertical: 4,
+    textAlign: "center",
+  },
+  betMiseLabel: {
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: "500",
+  },
+  dejaParieRow: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#f0fdf4",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+  dejaParieText: {
+    fontSize: 13,
+    color: "#16a34a",
+    fontWeight: "600",
+    textAlign: "center",
   },
   betButtonRow: {
     flexDirection: "row",
@@ -2288,6 +2604,49 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     marginTop: 2,
   },
+  alertesOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  alertesDismiss: {
+    flex: 1,
+  },
+  alertesSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "75%",
+    paddingBottom: Platform.OS === "ios" ? 24 : 16,
+  },
+  alertesSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  alertesSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  alertesSheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  alertesSheetClose: {
+    fontSize: 18,
+    color: "#94a3b8",
+    paddingHorizontal: 4,
+  },
   alerteVide: {
     alignItems: "center",
     paddingVertical: 60,
@@ -2305,6 +2664,66 @@ const styles = StyleSheet.create({
   alerteVideSub: {
     fontSize: 14,
     color: "#94a3b8",
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 24,
+    width: "80%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  confirmMsg: {
+    fontSize: 14,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  confirmBtnCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+  },
+  confirmBtnCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  confirmBtnDelete: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#dc2626",
+    alignItems: "center",
+  },
+  confirmBtnDeleteText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ffffff",
   },
   pwHint: {
     fontSize: 11,

@@ -32,6 +32,7 @@ Usage:
   ./run.sh logs      # suivre les logs
   ./run.sh ps        # status
   ./run.sh rebuild   # rebuild complet puis up
+  ./run.sh reset     # ⚠️  supprime la BDD et repart de zéro
 EOF
 }
 
@@ -58,6 +59,11 @@ case "$cmd" in
         ;;
     rebuild)
         compose build --no-cache "$@"
+        compose up --build
+        ;;
+    reset)
+        echo "⚠️  Suppression du volume PostgreSQL et redémarrage..."
+        compose down -v
         compose up --build
         ;;
     -h|--help|help)

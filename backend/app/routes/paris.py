@@ -26,7 +26,11 @@ def list_paris(
                 cur.execute(
                     """
                     SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           p.titre, p.prediction, p.cote, u.pseudo AS auteur
+                           p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                           EXISTS (
+                               SELECT 1 FROM user_paris_actifs upa
+                               WHERE upa.pari_id = pa.id AND upa.user_id = %s
+                           ) AS deja_parie
                     FROM paris pa
                     JOIN pronostics p ON p.id = pa.pronostic_id
                     JOIN users u ON u.id = pa.admin_user_id
@@ -34,20 +38,24 @@ def list_paris(
                     ORDER BY pa.created_at DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (statut, limit, offset),
+                    (current_user["id"], statut, limit, offset),
                 )
             else:
                 cur.execute(
                     """
                     SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                           p.titre, p.prediction, p.cote, u.pseudo AS auteur
+                           p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                           EXISTS (
+                               SELECT 1 FROM user_paris_actifs upa
+                               WHERE upa.pari_id = pa.id AND upa.user_id = %s
+                           ) AS deja_parie
                     FROM paris pa
                     JOIN pronostics p ON p.id = pa.pronostic_id
                     JOIN users u ON u.id = pa.admin_user_id
                     ORDER BY pa.created_at DESC
                     LIMIT %s OFFSET %s
                     """,
-                    (limit, offset),
+                    (current_user["id"], limit, offset),
                 )
             rows = cur.fetchall()
             return [dict(r) for r in rows]
