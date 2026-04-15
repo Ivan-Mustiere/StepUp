@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import logging
 import os
+import secrets
+import string
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +18,13 @@ from .config import ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY
 logger = logging.getLogger("stepup")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def _generate_friend_code() -> str:
+    """Génère un code ami unique au format xxxx-xxxx-xxxx."""
+    chars = string.ascii_lowercase + string.digits
+    groups = ["".join(secrets.choice(chars) for _ in range(4)) for _ in range(3)]
+    return "-".join(groups)
 
 
 def _create_access_token(subject: str) -> str:
@@ -61,7 +70,7 @@ async def _get_current_user(token: str = Depends(oauth2_scheme)):
             await cur.execute(
                 """
                 SELECT id, pseudo, email, age, genre, pays, region,
-                       coins, coins_en_jeu, gems, xp_total, vip, date_creation, is_admin, avatar
+                       coins, coins_en_jeu, gems, xp_total, vip, date_creation, is_admin, avatar, friend_code
                 FROM users
                 WHERE id = %s
                 """,

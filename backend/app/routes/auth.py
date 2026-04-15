@@ -9,6 +9,7 @@ from slowapi.util import get_remote_address
 import app.core.database as _db
 from app.core.security import (
     _create_access_token,
+    _generate_friend_code,
     _get_current_user,
     _hash_password,
     _verify_password,
@@ -95,6 +96,8 @@ class UserResponse(BaseModel):
     xp_total: int
     vip: bool
     date_creation: datetime
+    avatar: str | None = None
+    friend_code: str | None = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -115,14 +118,22 @@ async def register(request: Request, payload: RegisterRequest):
             if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Pseudo deja utilise.")
 
+            friend_code = _generate_friend_code()
+            # En cas de collision (rare), on réessaie
+            for _ in range(5):
+                await cur.execute("SELECT 1 FROM users WHERE friend_code = %s", (friend_code,))
+                if not await cur.fetchone():
+                    break
+                friend_code = _generate_friend_code()
+
             await cur.execute(
                 """
                 INSERT INTO users (
                     pseudo, age, genre, region, pays, email, password_hash,
-                    avatar, league_regarde
+                    avatar, league_regarde, friend_code
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, pseudo, email, coins, xp_total, vip, date_creation
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, pseudo, email, coins, xp_total, vip, date_creation, friend_code
                 """,
                 (
                     payload.pseudo,
@@ -134,6 +145,7 @@ async def register(request: Request, payload: RegisterRequest):
                     hashed_password,
                     payload.avatar,
                     payload.league_regarde,
+                    friend_code,
                 ),
             )
             row = await cur.fetchone()
@@ -298,4 +310,5 @@ async def me(current_user=Depends(_get_current_user)):
         "vip": current_user["vip"],
         "date_creation": current_user["date_creation"],
         "avatar": current_user["avatar"],
+        "friend_code": current_user["friend_code"],
     }

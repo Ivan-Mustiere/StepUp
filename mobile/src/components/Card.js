@@ -1,4 +1,5 @@
 import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { colors, spacing, radius } from "../styles";
 
 export default function Card({ children, style, onPress }) {
   if (onPress) {
@@ -13,11 +14,11 @@ export default function Card({ children, style, onPress }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 10,
-    padding: 14,
+    backgroundColor: colors.bgWhite,
+    borderRadius: radius.md,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    marginBottom: 10,
+    borderColor: colors.borderLight,
+    marginBottom: spacing.sm,
   },
 });

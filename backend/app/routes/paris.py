@@ -34,7 +34,11 @@ async def list_paris(
                        EXISTS (
                            SELECT 1 FROM user_paris_actifs upa
                            WHERE upa.pari_id = pa.id AND upa.user_id = %s
-                       ) AS deja_parie
+                       ) AS deja_parie,
+                       (
+                           SELECT upa.mise FROM user_paris_actifs upa
+                           WHERE upa.pari_id = pa.id AND upa.user_id = %s
+                       ) AS ma_mise
                 FROM paris pa
                 JOIN pronostics p ON p.id = pa.pronostic_id
                 JOIN users u ON u.id = pa.admin_user_id
@@ -52,7 +56,7 @@ async def list_paris(
                     pa.created_at ASC
                 LIMIT %s OFFSET %s
                 """,
-                (current_user["id"], current_user["id"], limit, offset),
+                (current_user["id"], current_user["id"], current_user["id"], limit, offset),
             )
             rows = await cur.fetchall()
             return [dict(r) for r in rows]

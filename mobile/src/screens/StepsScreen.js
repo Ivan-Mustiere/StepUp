@@ -13,6 +13,7 @@ import {
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 import { syncSteps, getTodaySteps } from "../api/api";
 import Button from "../components/Button";
+import { colors, fontSize, spacing, radius, shadow } from "../styles";
 
 const MAX_GEMS_PAR_JOUR = 20;
 const GOAL = 10000;
@@ -24,9 +25,8 @@ const CX = SIZE / 2;
 const CY = SIZE / 2 + 10;
 const R_OUTER = 118;
 const R_INNER = 90;
-const STROKE = R_OUTER - R_INNER; // 28
-const START_ANGLE = 150;  // degrees  (bottom-left)
-const END_ANGLE   = 390;  // degrees  (bottom-right), span = 240°
+const START_ANGLE = 150;
+const END_ANGLE   = 390;
 
 function degToRad(deg) {
   return (deg * Math.PI) / 180;
@@ -60,13 +60,12 @@ function ringPath(cx, cy, rOuter, rInner, startDeg, endDeg) {
 }
 
 function fillColor(progress) {
-  if (progress >= 1)    return "#16a34a"; // vert (objectif atteint)
-  if (progress >= 0.7)  return "#f59e0b"; // orange
-  if (progress >= 0.4)  return "#2563eb"; // bleu
-  return "#6366f1";                        // indigo (début)
+  if (progress >= 1)   return colors.success;
+  if (progress >= 0.7) return colors.warning;
+  if (progress >= 0.4) return colors.primary;
+  return colors.indigo;
 }
 
-// Ticks aux jalons 0 / 2500 / 5000 / 7500 / 10000
 const MILESTONES = [0, 2500, 5000, 7500, 10000];
 
 function Speedometer({ steps }) {
@@ -74,7 +73,6 @@ function Speedometer({ steps }) {
   const fillEnd = START_ANGLE + progress * (END_ANGLE - START_ANGLE);
   const color = fillColor(progress);
 
-  // Aiguille
   const needleAngle = START_ANGLE + progress * (END_ANGLE - START_ANGLE);
   const needleTip = polarXY(CX, CY, R_INNER - 6, needleAngle);
   const needleBase1 = polarXY(CX, CY, 12, needleAngle + 90);
@@ -84,17 +82,17 @@ function Speedometer({ steps }) {
     <Svg width={SIZE} height={SIZE - 20} viewBox={`0 0 ${SIZE} ${SIZE}`}>
       <Defs>
         <LinearGradient id="fillGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <Stop offset="0%" stopColor="#6366f1" />
-          <Stop offset="50%" stopColor="#2563eb" />
-          <Stop offset="80%" stopColor="#f59e0b" />
-          <Stop offset="100%" stopColor="#16a34a" />
+          <Stop offset="0%"   stopColor={colors.indigo} />
+          <Stop offset="50%"  stopColor={colors.primary} />
+          <Stop offset="80%"  stopColor={colors.warning} />
+          <Stop offset="100%" stopColor={colors.success} />
         </LinearGradient>
       </Defs>
 
       {/* Piste grise */}
       <Path
         d={ringPath(CX, CY, R_OUTER, R_INNER, START_ANGLE, END_ANGLE)}
-        fill="#e2e8f0"
+        fill={colors.borderLight}
       />
 
       {/* Remplissage coloré */}
@@ -117,7 +115,7 @@ function Speedometer({ steps }) {
           <React.Fragment key={m}>
             <Path
               d={`M ${inner.x} ${inner.y} L ${outer.x} ${outer.y}`}
-              stroke={reached ? color : "#94a3b8"}
+              stroke={reached ? color : colors.textPlaceholder}
               strokeWidth={m % 5000 === 0 ? 2.5 : 1.5}
             />
             {m % 5000 === 0 && (
@@ -126,7 +124,7 @@ function Speedometer({ steps }) {
                 y={label.y + 4}
                 textAnchor="middle"
                 fontSize={10}
-                fill={reached ? "#0f172a" : "#94a3b8"}
+                fill={reached ? colors.textPrimary : colors.textPlaceholder}
                 fontWeight="600"
               >
                 {m === 0 ? "0" : `${m / 1000}k`}
@@ -142,27 +140,24 @@ function Speedometer({ steps }) {
         fill={color}
         opacity={0.9}
       />
-      {/* Centre aiguille */}
-      <Circle cx={CX} cy={CY} r={10} fill="#0f172a" />
-      <Circle cx={CX} cy={CY} r={5} fill="#ffffff" />
+      <Circle cx={CX} cy={CY} r={10} fill={colors.textPrimary} />
+      <Circle cx={CX} cy={CY} r={5}  fill={colors.white} />
 
       {/* Pas (centre) */}
       <SvgText
-        x={CX}
-        y={CY - 18}
+        x={CX} y={CY - 18}
         textAnchor="middle"
         fontSize={44}
         fontWeight="800"
-        fill="#0f172a"
+        fill={colors.textPrimary}
       >
         {steps.toLocaleString("fr-FR")}
       </SvgText>
       <SvgText
-        x={CX}
-        y={CY + 10}
+        x={CX} y={CY + 10}
         textAnchor="middle"
         fontSize={15}
-        fill="#64748b"
+        fill={colors.textSubtle}
         fontWeight="500"
       >
         pas
@@ -170,11 +165,10 @@ function Speedometer({ steps }) {
 
       {/* Objectif en bas */}
       <SvgText
-        x={CX}
-        y={CY + 58}
+        x={CX} y={CY + 58}
         textAnchor="middle"
         fontSize={12}
-        fill="#94a3b8"
+        fill={colors.textPlaceholder}
       >
         objectif {GOAL.toLocaleString("fr-FR")} pas
       </SvgText>
@@ -275,7 +269,7 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
       {/* Speedomètre */}
       <View style={styles.speedo}>
         {loading ? (
-          <ActivityIndicator size="large" color="#2563eb" style={{ height: SIZE - 20 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ height: SIZE - 20 }} />
         ) : (
           <Speedometer steps={pas} />
         )}
@@ -398,154 +392,138 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: "#f8fafc" },
-  scrollContent: { paddingBottom: 32 },
+  scroll:        { flex: 1, backgroundColor: colors.bgLight },
+  scrollContent: { paddingBottom: spacing.xl4 },
 
   speedo: {
     alignItems: "center",
-    paddingTop: 16,
-    paddingBottom: 4,
-    backgroundColor: "#ffffff",
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xs,
+    backgroundColor: colors.bgWhite,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: colors.bgSubtle,
   },
 
   gemsRow: {
     flexDirection: "row",
-    backgroundColor: "#ffffff",
-    marginTop: 12,
-    marginHorizontal: 16,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: colors.bgWhite,
+    marginTop: spacing.md,
+    marginHorizontal: spacing.xl,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadow.sm,
   },
-  gemsBadge: { flex: 1, alignItems: "center" },
-  gemsBadgeIcon: { fontSize: 22, marginBottom: 2 },
-  gemsBadgeValue: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
-  gemsBadgeLabel: { fontSize: 11, color: "#94a3b8", marginTop: 2 },
-  gemsDivider: { width: 1, height: 40, backgroundColor: "#e2e8f0" },
+  gemsBadge:      { flex: 1, alignItems: "center" },
+  gemsBadgeIcon:  { fontSize: fontSize.xl4, marginBottom: 2 },
+  gemsBadgeValue: { fontSize: fontSize.xl4, fontWeight: "800", color: colors.textPrimary },
+  gemsBadgeLabel: { fontSize: fontSize.xs, color: colors.textPlaceholder, marginTop: 2 },
+  gemsDivider:    { width: 1, height: 40, backgroundColor: colors.borderLight },
 
   nextGemCard: {
-    backgroundColor: "#ffffff",
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.bgWhite,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    ...shadow.sm,
   },
   nextGemHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  nextGemLabel: { fontSize: 13, color: "#475569", fontWeight: "500" },
-  nextGemCount: { fontSize: 13, color: "#2563eb", fontWeight: "700" },
+  nextGemLabel:  { fontSize: fontSize.md, color: colors.textMuted, fontWeight: "500" },
+  nextGemCount:  { fontSize: fontSize.md, color: colors.primary, fontWeight: "700" },
   progressTrack: {
     height: 8,
-    backgroundColor: "#e2e8f0",
-    borderRadius: 4,
+    backgroundColor: colors.borderLight,
+    borderRadius: radius.xs,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#2563eb",
-    borderRadius: 4,
+    backgroundColor: colors.primary,
+    borderRadius: radius.xs,
   },
 
   plafondCard: {
-    backgroundColor: "#f0fdf4",
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 14,
+    backgroundColor: colors.successBg,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#bbf7d0",
+    borderColor: colors.successBorder,
   },
-  plafondText: { fontSize: 13, color: "#16a34a", fontWeight: "600" },
+  plafondText: { fontSize: fontSize.md, color: colors.success, fontWeight: "600" },
 
-  success: { color: "#16a34a", fontSize: 13, fontWeight: "600", textAlign: "center", marginTop: 10 },
-  error:   { color: "#dc2626", fontSize: 13, textAlign: "center", marginTop: 10, marginHorizontal: 16 },
+  success: { color: colors.success, fontSize: fontSize.md, fontWeight: "600", textAlign: "center", marginTop: 10 },
+  error:   { color: colors.error,   fontSize: fontSize.md, textAlign: "center", marginTop: 10, marginHorizontal: spacing.xl },
 
   syncCard: {
-    backgroundColor: "#ffffff",
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.bgWhite,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    ...shadow.sm,
   },
-  syncTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
-  syncSub:   { fontSize: 13, color: "#64748b", marginBottom: 12 },
+  syncTitle: { fontSize: fontSize.base, fontWeight: "700", color: colors.textPrimary, marginBottom: spacing.xs },
+  syncSub:   { fontSize: fontSize.md, color: colors.textSubtle, marginBottom: spacing.md },
   syncBtn: {
-    backgroundColor: "#2563eb",
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
     paddingVertical: 13,
     alignItems: "center",
   },
-  syncBtnSmall: { paddingHorizontal: 18, paddingVertical: 13 },
+  syncBtnSmall:    { paddingHorizontal: 18, paddingVertical: 13 },
   syncBtnDisabled: { opacity: 0.5 },
-  syncBtnText: { color: "#ffffff", fontSize: 15, fontWeight: "700" },
+  syncBtnText:     { color: colors.white, fontSize: fontSize.lg, fontWeight: "700" },
 
-  manualRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  manualRow: { flexDirection: "row", gap: spacing.sm, marginBottom: 10 },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    borderColor: colors.borderMedium,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
-    backgroundColor: "#f8fafc",
+    fontSize: fontSize.base,
+    backgroundColor: colors.bgLight,
   },
 
-  shortcutsRow: { flexDirection: "row", gap: 8 },
+  shortcutsRow: { flexDirection: "row", gap: spacing.sm },
   shortcut: {
     flex: 1,
     paddingVertical: 9,
-    borderRadius: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#2563eb",
-    backgroundColor: "#eff6ff",
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
     alignItems: "center",
   },
-  shortcutText: { fontSize: 13, color: "#2563eb", fontWeight: "600" },
+  shortcutText: { fontSize: fontSize.md, color: colors.primary, fontWeight: "600" },
 
   bareme: {
-    backgroundColor: "#ffffff",
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: colors.bgWhite,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    ...shadow.sm,
   },
-  baremeTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 12 },
-  baremeGrid: { gap: 6 },
+  baremeTitle: { fontSize: fontSize.base, fontWeight: "700", color: colors.textPrimary, marginBottom: spacing.md },
+  baremeGrid:  { gap: 6 },
   baremeItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#f8fafc",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgLight,
   },
-  baremeItemActive: { backgroundColor: "#f0fdf4" },
-  baremeSteps: { fontSize: 13, color: "#475569", fontWeight: "500", flex: 1 },
-  baremeArrow: { fontSize: 13, color: "#cbd5e1", marginHorizontal: 8 },
-  baremeGems:  { fontSize: 13, color: "#475569", fontWeight: "600" },
-  baremeTextActive: { color: "#16a34a", fontWeight: "700" },
+  baremeItemActive:  { backgroundColor: colors.successBg },
+  baremeSteps:       { fontSize: fontSize.md, color: colors.textMuted, fontWeight: "500", flex: 1 },
+  baremeArrow:       { fontSize: fontSize.md, color: colors.borderMedium, marginHorizontal: spacing.sm },
+  baremeGems:        { fontSize: fontSize.md, color: colors.textMuted, fontWeight: "600" },
+  baremeTextActive:  { color: colors.success, fontWeight: "700" },
 });

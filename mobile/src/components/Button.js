@@ -1,4 +1,5 @@
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
+import { colors, fontSize, spacing, radius } from "../styles";
 
 export default function Button({ children, onPress, variant = "primary", disabled, style }) {
   return (
@@ -17,38 +18,38 @@ export default function Button({ children, onPress, variant = "primary", disable
 
 const styles = StyleSheet.create({
   btn: {
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 9,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
   primary: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
   },
   secondary: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.bgSubtle,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: colors.borderMedium,
   },
   danger: {
-    backgroundColor: "#fee2e2",
+    backgroundColor: colors.errorBg,
     borderWidth: 1,
-    borderColor: "#fca5a5",
+    borderColor: colors.errorBorder,
   },
   disabled: {
     opacity: 0.5,
   },
   text: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "600",
-    color: "#ffffff",
+    color: colors.white,
   },
   text_secondary: {
-    color: "#334155",
+    color: colors.textSecondary,
   },
   text_danger: {
-    color: "#dc2626",
+    color: colors.error,
   },
   textDisabled: {
     opacity: 0.7,

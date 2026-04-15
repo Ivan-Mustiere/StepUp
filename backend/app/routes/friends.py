@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 import app.core.database as _db
@@ -9,6 +9,23 @@ router = APIRouter(prefix="/api/v1/friends", tags=["friends"])
 
 class FriendRequestCreate(BaseModel):
     friend_user_id: int
+
+
+@router.get("/search")
+async def search_by_friend_code(code: str = Query(...), current_user=Depends(_get_current_user)):
+    """Recherche un utilisateur par son code ami."""
+    async with _db.get_db() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT id, pseudo, avatar, xp_total, coins FROM users WHERE friend_code = %s",
+                (code.strip().lower(),),
+            )
+            row = await cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Code ami introuvable.")
+            if row["id"] == current_user["id"]:
+                raise HTTPException(status_code=400, detail="C'est votre propre code ami.")
+            return dict(row)
 
 
 @router.get("")

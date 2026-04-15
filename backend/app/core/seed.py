@@ -5,6 +5,7 @@ Idempotent : ne recrée pas ce qui existe déjà.
 
 import itertools
 import logging
+import random
 from datetime import datetime, timedelta
 
 import psycopg2
@@ -440,6 +441,7 @@ def seed_dev_data() -> None:
     memberships_created = 0
     friendships_created = 0
     equipes_created = 0
+    equipes_assigned = 0
     pronostics_created = 0
     paris_created = 0
 
@@ -534,6 +536,31 @@ def seed_dev_data() -> None:
                 )
                 equipes_created += 1
 
+            # ── Équipes favorites des utilisateurs ────────────────────
+            cur.execute("SELECT id FROM equipes_esport")
+            all_equipe_ids = [r["id"] for r in cur.fetchall()]
+            equipes_assigned = 0
+            if all_equipe_ids:
+                for u in UTILISATEURS_TEST:
+                    cur.execute("SELECT id FROM users WHERE pseudo = %s", (u["pseudo"],))
+                    user_row = cur.fetchone()
+                    if not user_row:
+                        continue
+                    cur.execute(
+                        "SELECT 1 FROM user_equipes_esport WHERE user_id = %s",
+                        (user_row["id"],),
+                    )
+                    if cur.fetchone():
+                        continue
+                    nb = random.randint(1, 3)
+                    chosen = random.sample(all_equipe_ids, min(nb, len(all_equipe_ids)))
+                    for equipe_id in chosen:
+                        cur.execute(
+                            "INSERT INTO user_equipes_esport (user_id, equipe_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                            (user_row["id"], equipe_id),
+                        )
+                        equipes_assigned += 1
+
             # ── Pronostics + Paris ────────────────────────────────────
             cur.execute("SELECT id FROM users WHERE pseudo = 'admin'")
             admin_row = cur.fetchone()
@@ -581,10 +608,12 @@ def seed_dev_data() -> None:
         logger.info("Seed : %d lien(s) d'amitié créé(s).", friendships_created)
     if equipes_created:
         logger.info("Seed : %d équipe(s) esport créée(s).", equipes_created)
+    if equipes_assigned:
+        logger.info("Seed : %d équipe(s) assignée(s) aux utilisateurs.", equipes_assigned)
     if pronostics_created:
         logger.info("Seed : %d pronostic(s) créé(s).", pronostics_created)
     if paris_created:
         logger.info("Seed : %d pari(s) créé(s).", paris_created)
     if not any([users_created, communautes_created, memberships_created,
-                friendships_created, pronostics_created, paris_created]):
+                friendships_created, equipes_assigned, pronostics_created, paris_created]):
         logger.info("Seed : données déjà présentes, rien à faire.")

@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import { formatDate, statutLabel, statutColor } from "../utils/helpers";
+import { colors, fontSize, spacing, radius } from "../styles";
 
 export default function DetailScreen({ pronostic, onBack }) {
   if (!pronostic) return null;
@@ -61,70 +62,70 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: colors.borderLight,
   },
   screenTitle: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   placeholder: {
     width: 70,
   },
   scroll: {
     flex: 1,
-    padding: 16,
+    padding: spacing.xl,
   },
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
   },
   titre: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     flex: 1,
   },
   badge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: radius.lg,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: "600",
-    color: "#ffffff",
+    color: colors.white,
   },
   section: {
-    marginBottom: 14,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   value: {
-    fontSize: 15,
-    color: "#334155",
+    fontSize: fontSize.lg,
+    color: colors.textSecondary,
   },
   meta: {
-    marginTop: 16,
-    gap: 4,
+    marginTop: spacing.xl,
+    gap: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-    paddingTop: 12,
+    borderTopColor: colors.bgSubtle,
+    paddingTop: spacing.md,
   },
   metaText: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
 });

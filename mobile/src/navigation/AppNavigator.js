@@ -19,6 +19,8 @@ import StepsScreen from "../screens/StepsScreen";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import { formatDate, statutLabel, statutColor } from "../utils/helpers";
+import { colors, fontSize, spacing, radius, shadow } from "../styles";
+import { getRank, getNextRank, getRankProgress } from "../config/ranks";
 import {
   updateProfile,
   uploadAvatar,
@@ -30,6 +32,7 @@ import {
   sendFriendRequest,
   removeFriend,
   getUserProfile,
+  searchByFriendCode,
   getParis,
   placeBet,
   getCommunautes,
@@ -336,9 +339,16 @@ function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustM
       </View>
 
       {p.statut === "actif" && parisFerme && (
-        <View style={styles.parisFermeRow}>
-          <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
-        </View>
+        p.deja_parie ? (
+          <View style={styles.maMiseRow}>
+            <Text style={styles.maMiseText}>✅ Mise placée : <Text style={styles.maMiseValue}>{p.ma_mise} 🪙</Text></Text>
+            <Text style={styles.maMiseCote}>Cote : <Text style={styles.maMiseValue}>×{p.cote}</Text></Text>
+          </View>
+        ) : (
+          <View style={styles.parisFermeRow}>
+            <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
+          </View>
+        )
       )}
       {p.statut === "actif" && !parisFerme && !p.deja_parie && (
         bettingId === p.id ? (
@@ -900,10 +910,18 @@ function ChatScreen({ communaute, profile, onBack }) {
 }
 
 // --- Modal profil ---
-function ProfileModal({ user, currentUser, onClose }) {
+function ProfileModal({ user, currentUser, onClose, onFriendRemoved }) {
   const [requestState, setRequestState] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [fullUser, setFullUser] = useState(user);
+  const [confirmVisible, setConfirmVisible] = useState(false);
   const isSelf = currentUser?.id === user.id;
+
+  useEffect(() => {
+    getUserProfile(user.id)
+      .then(setFullUser)
+      .catch(() => {});
+  }, [user.id]);
 
   async function handleAskFriend() {
     setRequestState("loading");
@@ -917,52 +935,75 @@ function ProfileModal({ user, currentUser, onClose }) {
     }
   }
 
+  async function doRemoveFriend() {
+    try {
+      await removeFriend(fullUser.id);
+      setConfirmVisible(false);
+      onFriendRemoved?.();
+      onClose();
+    } catch (err) {
+      setConfirmVisible(false);
+      setErrorMsg(err.message);
+    }
+  }
+
   return (
+    <>
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
         <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <TouchableOpacity style={styles.modalClose} onPress={onClose}>
-            <Text style={styles.modalCloseText}>✕</Text>
-          </TouchableOpacity>
 
-          <View style={styles.profilInfo}>
-            <View style={styles.profilAvatar}>
-              <Text style={styles.profilAvatarText}>{user.pseudo?.[0]?.toUpperCase()}</Text>
-            </View>
-            <Text style={styles.profilPseudo}>{user.pseudo}</Text>
-            {!isSelf && (
-              <View style={{ marginTop: 8 }}>
-                {requestState === "sent" ? (
-                  <Text style={styles.sentLabel}>Demande envoyée ✓</Text>
+          {!isSelf && (
+            <TouchableOpacity
+              style={styles.modalAddFriendBtn}
+              onPress={fullUser.is_friend ? () => setConfirmVisible(true) : handleAskFriend}
+              disabled={requestState === "loading"}
+            >
+              <Text style={styles.modalAddFriendIcon}>
+                {fullUser.is_friend
+                  ? "🗑️"
+                  : requestState === "sent" ? "✓"
+                  : requestState === "loading" ? "…"
+                  : "🫂"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+
+          {(() => {
+            const rank = getRank(fullUser.xp_total ?? 0);
+            return (
+              <View style={[styles.profilInfo, { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 8 }]}>
+                {/* Bannière rang — image elo en arrière-plan */}
+                <View style={styles.profilBanner}>
+                  <Image source={rank.image} style={styles.profilBannerImg} resizeMode="contain" />
+                </View>
+                {/* Avatar */}
+                {fullUser.avatar ? (
+                  <Image
+                    source={{ uri: API_BASE_URL + fullUser.avatar }}
+                    style={[styles.profilAvatarImg, { borderColor: rank.color }]}
+                  />
                 ) : (
-                  <Button
-                    onPress={handleAskFriend}
-                    disabled={requestState === "loading"}
-                  >
-                    {requestState === "loading" ? "..." : "Demander en ami"}
-                  </Button>
+                  <View style={[styles.profilAvatar, { backgroundColor: rank.color }]}>
+                    <Text style={styles.profilAvatarText}>{fullUser.pseudo?.[0]?.toUpperCase()}</Text>
+                  </View>
                 )}
+                <Text style={styles.profilPseudo}>{fullUser.pseudo}</Text>
+                <View style={styles.rankBadge}>
+                  <Image source={rank.image} style={styles.rankBadgeIcon} resizeMode="contain" />
+                  <Text style={[styles.rankBadgeName, { color: rank.color }]}>{rank.name}</Text>
+                </View>
                 {requestState === "error" && <Text style={styles.error}>{errorMsg}</Text>}
               </View>
-            )}
-          </View>
+            );
+          })()}
 
-          <View style={styles.profilStats}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{user.coins}</Text>
-              <Text style={styles.statLabel}>Coins</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{user.xp_total}</Text>
-              <Text style={styles.statLabel}>XP</Text>
-            </View>
-          </View>
-
-          {user.communautes?.length > 0 && (
+          {fullUser.communautes?.length > 0 && (
             <View style={{ marginTop: 12 }}>
               <Text style={styles.label}>Communautés</Text>
               <View style={styles.commuTags}>
-                {user.communautes.map((c) => (
+                {fullUser.communautes.map((c) => (
                   <View key={c} style={styles.commuTag}>
                     <Text style={styles.commuTagText}>{c}</Text>
                   </View>
@@ -970,9 +1011,53 @@ function ProfileModal({ user, currentUser, onClose }) {
               </View>
             </View>
           )}
+
+          {fullUser.equipes?.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.label}>Équipes favorites</Text>
+              <View style={styles.profilEquipesRow}>
+                {fullUser.equipes.map((e) => {
+                  const logo = TEAM_LOGOS[e.nom];
+                  return (
+                    <View key={e.id} style={styles.profilEquipeItem}>
+                      {logo ? (
+                        <Image source={logo} style={styles.profilEquipeLogo} resizeMode="contain" />
+                      ) : (
+                        <View style={[styles.profilEquipeColorDot, { backgroundColor: e.couleur }]} />
+                      )}
+                      <Text style={[styles.profilEquipeNom, { color: e.couleur }]}>{e.nom}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     </Modal>
+
+    {/* Modal confirmation suppression — par-dessus le ProfileModal */}
+    <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
+      <View style={styles.confirmOverlay}>
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmTitle}>Supprimer un ami</Text>
+          <Text style={styles.confirmMsg}>
+            Voulez-vous retirer{" "}
+            <Text style={{ fontWeight: "700" }}>{fullUser.pseudo}</Text>{" "}
+            de votre liste d'amis ?
+          </Text>
+          <View style={styles.confirmActions}>
+            <TouchableOpacity style={styles.confirmBtnCancel} onPress={() => setConfirmVisible(false)}>
+              <Text style={styles.confirmBtnCancelText}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.confirmBtnDelete} onPress={doRemoveFriend}>
+              <Text style={styles.confirmBtnDeleteText}>Supprimer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -980,7 +1065,7 @@ function ProfileModal({ user, currentUser, onClose }) {
 function AmisScreen({ currentUser }) {
   const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
-  const [friendId, setFriendId] = useState("");
+  const [friendCode, setFriendCode] = useState("");
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -988,19 +1073,6 @@ function AmisScreen({ currentUser }) {
   const [error, setError] = useState("");
   const [profileModal, setProfileModal] = useState(null);
   const [openPrivateChat, setOpenPrivateChat] = useState(null);
-  const [confirmRemove, setConfirmRemove] = useState(null); // { id, pseudo }
-
-  async function doRemoveFriend() {
-    try {
-      await removeFriend(confirmRemove.id);
-      setConfirmRemove(null);
-      loadData();
-    } catch (err) {
-      setError(err.message);
-      setConfirmRemove(null);
-    }
-  }
-
   async function loadData() {
     try {
       const [friendsList, requests] = await Promise.all([
@@ -1017,13 +1089,13 @@ function AmisScreen({ currentUser }) {
   useEffect(() => { loadData(); }, []);
 
   async function handleSearch() {
-    if (!friendId.trim()) return;
+    if (!friendCode.trim()) return;
     setPreviewError("");
     setPreview(null);
     setRequestSent(false);
     setPreviewLoading(true);
     try {
-      const user = await getUserProfile(Number(friendId));
+      const user = await searchByFriendCode(friendCode.trim());
       setPreview(user);
     } catch (err) {
       setPreviewError(err.message);
@@ -1076,9 +1148,9 @@ function AmisScreen({ currentUser }) {
           user={profileModal}
           currentUser={currentUser}
           onClose={() => setProfileModal(null)}
+          onFriendRemoved={loadData}
         />
       )}
-
 
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -1087,11 +1159,12 @@ function AmisScreen({ currentUser }) {
           <View style={styles.searchRow}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="ID utilisateur"
-              keyboardType="number-pad"
-              value={friendId}
+              placeholder="xxxx-xxxx-xxxx"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={friendCode}
               onChangeText={(v) => {
-                setFriendId(v);
+                setFriendCode(v);
                 setPreview(null);
                 setRequestSent(false);
                 setPreviewError("");
@@ -1155,7 +1228,6 @@ function AmisScreen({ currentUser }) {
                     <Text style={styles.friendMeta}>{f.xp_total} XP · {f.coins} coins</Text>
                   </TouchableOpacity>
                   <Button onPress={() => setOpenPrivateChat(f)}>💬</Button>
-                  <Button variant="danger" onPress={() => setConfirmRemove({ id: f.id, pseudo: f.pseudo })}>✕</Button>
                 </View>
               </Card>
             ))
@@ -1163,38 +1235,6 @@ function AmisScreen({ currentUser }) {
         </View>
       </ScrollView>
 
-      {/* Modal confirmation suppression ami */}
-      <Modal
-        visible={!!confirmRemove}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmRemove(null)}
-      >
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Supprimer un ami</Text>
-            <Text style={styles.confirmMsg}>
-              Voulez-vous retirer{" "}
-              <Text style={{ fontWeight: "700" }}>{confirmRemove?.pseudo}</Text>{" "}
-              de votre liste d'amis ?
-            </Text>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity
-                style={styles.confirmBtnCancel}
-                onPress={() => setConfirmRemove(null)}
-              >
-                <Text style={styles.confirmBtnCancelText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmBtnDelete}
-                onPress={doRemoveFriend}
-              >
-                <Text style={styles.confirmBtnDeleteText}>Supprimer</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1500,6 +1540,7 @@ function AlertesScreen({ currentUser, onAction }) {
 function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
   const [section, setSection] = useState(null); // null | "infos" | "password" | "equipes"
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [form, setForm] = useState({
     pseudo: profile.pseudo || "",
     age: profile.age ? String(profile.age) : "",
@@ -1627,34 +1668,57 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
 
   return (
     <View style={styles.screen}>
-
-
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Carte identité */}
-        <Card>
-          <View style={styles.profilInfo}>
-            <TouchableOpacity style={styles.profilAvatarWrapper} onPress={handlePickAvatar} disabled={avatarUploading}>
-              {profile.avatar ? (
-                <Image
-                  source={{ uri: API_BASE_URL + profile.avatar }}
-                  style={styles.profilAvatarImg}
-                />
-              ) : (
-                <View style={styles.profilAvatar}>
-                  <Text style={styles.profilAvatarText}>{profile.pseudo?.[0]?.toUpperCase()}</Text>
+        <Card style={{ position: "relative" }}>
+          <TouchableOpacity style={styles.profilSettingsBtn} onPress={() => { setSection(null); setError(""); setSuccess(""); setSettingsVisible(true); }}>
+            <Text style={styles.profilSettingsIcon}>⚙️</Text>
+          </TouchableOpacity>
+
+          {(() => {
+            const rank = getRank(profile.xp_total ?? 0);
+            return (
+              <View style={styles.profilInfo}>
+                {/* Bannière rang — image elo en arrière-plan */}
+                <View style={styles.profilBanner}>
+                  <Image source={rank.image} style={styles.profilBannerImg} resizeMode="contain" />
                 </View>
-              )}
-              <View style={styles.profilAvatarEditBadge}>
-                {avatarUploading
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.profilAvatarEditIcon}>📷</Text>
-                }
+                {/* Avatar par dessus la bannière */}
+                <TouchableOpacity style={styles.profilAvatarWrapper} onPress={handlePickAvatar} disabled={avatarUploading}>
+                  {profile.avatar ? (
+                    <Image
+                      source={{ uri: API_BASE_URL + profile.avatar }}
+                      style={[styles.profilAvatarImg, { borderColor: rank.color }]}
+                    />
+                  ) : (
+                    <View style={[styles.profilAvatar, { backgroundColor: rank.color }]}>
+                      <Text style={styles.profilAvatarText}>{profile.pseudo?.[0]?.toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <View style={styles.profilAvatarEditBadge}>
+                    {avatarUploading
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.profilAvatarEditIcon}>📷</Text>
+                    }
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.profilPseudo}>{profile.pseudo}</Text>
+                <Text style={styles.profilEmail}>{profile.email}</Text>
+                {profile.friend_code && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        navigator.clipboard.writeText(profile.friend_code);
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.profilFriendCode}>🔗 {profile.friend_code}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            </TouchableOpacity>
-            <Text style={styles.profilPseudo}>{profile.pseudo}</Text>
-            <Text style={styles.profilEmail}>{profile.email}</Text>
-            <Text style={styles.profilId}>ID : {profile.id}</Text>
-          </View>
+            );
+          })()}
 
           <View style={styles.profilStats}>
             <View style={styles.stat}>
@@ -1665,16 +1729,39 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
               <Text style={styles.statValue}>{profile.xp_total}</Text>
               <Text style={styles.statLabel}>XP total</Text>
             </View>
-            {profile.rank ? (
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{profile.rank}</Text>
-                <Text style={styles.statLabel}>Rang</Text>
-              </View>
-            ) : null}
           </View>
 
+          {(() => {
+            const rank = getRank(profile.xp_total ?? 0);
+            const next = getNextRank(profile.xp_total ?? 0);
+            const progress = getRankProgress(profile.xp_total ?? 0);
+            return (
+              <View style={styles.rankSection}>
+                <View style={styles.rankRow}>
+                  <Image source={rank.image} style={styles.rankIcon} resizeMode="contain" />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={[styles.rankName, { color: rank.color }]}>{rank.name}</Text>
+                      {next && (
+                        <Text style={styles.rankNextLabel}>
+                          {next.minXp - (profile.xp_total ?? 0)} XP → {next.name}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.rankProgressBar}>
+                      <View style={[styles.rankProgressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: rank.color }]} />
+                    </View>
+                  </View>
+                </View>
+                {rank.discount > 0 && (
+                  <Text style={styles.rankPerk}>🏷️ -{rank.discount}% en boutique</Text>
+                )}
+              </View>
+            );
+          })()}
+
           {mesEquipes.length > 0 && (
-            <View style={styles.profilEquipesRow}>
+            <View style={[styles.profilEquipesRow, { borderTopWidth: 1, borderTopColor: "#f1f5f9", paddingTop: 12 }]}>
               {mesEquipes.map((e) => {
                 const logo = TEAM_LOGOS[e.nom];
                 return (
@@ -1692,223 +1779,140 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
           )}
         </Card>
 
-        {success ? (
-          <View style={styles.successBox}>
-            <Text style={styles.successText}>✓ {success}</Text>
-          </View>
-        ) : null}
-
-        {/* Modifier les infos */}
-        <TouchableOpacity
-          style={styles.editSection}
-          onPress={() => { setSection(section === "infos" ? null : "infos"); setError(""); setSuccess(""); }}
-        >
-          <Text style={styles.editSectionTitle}>✏️ Modifier le profil</Text>
-          <Text style={styles.editSectionChevron}>{section === "infos" ? "▲" : "▼"}</Text>
-        </TouchableOpacity>
-
-        {section === "infos" && (
-          <Card style={styles.editCard}>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <Text style={styles.fieldLabel}>Pseudo</Text>
-            <TextInput
-              style={styles.input}
-              value={form.pseudo}
-              onChangeText={(v) => setForm((p) => ({ ...p, pseudo: v }))}
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.fieldLabel}>Age</Text>
-            <TextInput
-              style={styles.input}
-              value={form.age}
-              onChangeText={(v) => setForm((p) => ({ ...p, age: v }))}
-              keyboardType="number-pad"
-              placeholder="Non renseigné"
-            />
-
-            <Text style={styles.fieldLabel}>Genre</Text>
-            <View style={styles.selectRow}>
-              {GENRES.map((g) => (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.selectOption, form.genre === g && styles.selectOptionActive]}
-                  onPress={() => setForm((p) => ({ ...p, genre: g }))}
-                >
-                  <Text style={[styles.selectOptionText, form.genre === g && styles.selectOptionTextActive]}>
-                    {g.charAt(0).toUpperCase() + g.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>Pays</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-              {PAYS.map(({ label, flag }) => (
-                <TouchableOpacity
-                  key={label}
-                  style={[styles.chip, form.pays === label && styles.chipActive]}
-                  onPress={() => setForm((prev) => ({ ...prev, pays: label, region: "" }))}
-                >
-                  <Text style={[styles.chipText, form.pays === label && styles.chipTextActive]}>
-                    {label} {flag}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {form.pays && REGIONS_BY_PAYS[form.pays] && (
-              <>
-                <Text style={styles.fieldLabel}>Région</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-                  {REGIONS_BY_PAYS[form.pays].map((r) => (
-                    <TouchableOpacity
-                      key={r}
-                      style={[styles.chip, form.region === r && styles.chipActive]}
-                      onPress={() => setForm((prev) => ({ ...prev, region: r }))}
-                    >
-                      <Text style={[styles.chipText, form.region === r && styles.chipTextActive]}>{r}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            )}
-
-            <Button onPress={handleSaveInfos} disabled={saving}>
-              {saving ? "Sauvegarde..." : "Enregistrer"}
-            </Button>
-          </Card>
-        )}
-
-        {/* Changer le mot de passe */}
-        <TouchableOpacity
-          style={styles.editSection}
-          onPress={() => { setSection(section === "password" ? null : "password"); setError(""); setSuccess(""); }}
-        >
-          <Text style={styles.editSectionTitle}>🔒 Changer le mot de passe</Text>
-          <Text style={styles.editSectionChevron}>{section === "password" ? "▲" : "▼"}</Text>
-        </TouchableOpacity>
-
-        {section === "password" && (
-          <Card style={styles.editCard}>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <Text style={styles.fieldLabel}>Mot de passe actuel</Text>
-            <TextInput
-              style={styles.input}
-              value={pwForm.current}
-              onChangeText={(v) => setPwForm((p) => ({ ...p, current: v }))}
-              secureTextEntry
-              placeholder="••••••••"
-            />
-
-            <Text style={styles.fieldLabel}>Nouveau mot de passe</Text>
-            <TextInput
-              style={styles.input}
-              value={pwForm.next}
-              onChangeText={(v) => setPwForm((p) => ({ ...p, next: v }))}
-              secureTextEntry
-              placeholder="••••••••"
-            />
-
-            <Text style={styles.fieldLabel}>Confirmer le nouveau mot de passe</Text>
-            <TextInput
-              style={styles.input}
-              value={pwForm.confirm}
-              onChangeText={(v) => setPwForm((p) => ({ ...p, confirm: v }))}
-              secureTextEntry
-              placeholder="••••••••"
-            />
-
-            <Text style={styles.pwHint}>
-              Doit contenir : majuscule, minuscule, chiffre et caractère spécial (min. 8 caractères)
-            </Text>
-
-            <Button onPress={handleChangePassword} disabled={saving}>
-              {saving ? "Modification..." : "Changer le mot de passe"}
-            </Button>
-          </Card>
-        )}
-
-        {/* Section équipes esport */}
-        <TouchableOpacity
-          style={styles.editSection}
-          onPress={() => {
-            const next = section === "equipes" ? null : "equipes";
-            setSection(next);
-            setError(""); setSuccess("");
-            if (next === "equipes") loadEquipes();
-          }}
-        >
-          <Text style={styles.editSectionTitle}>🎮 Mes équipes esport</Text>
-          <Text style={styles.editSectionChevron}>{section === "equipes" ? "▲" : "▼"}</Text>
-        </TouchableOpacity>
-
-        {section === "equipes" && (
-          <Card style={styles.editCard}>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            {/* Équipes sélectionnées */}
-            <Text style={styles.equipesHint}>
-              {mesEquipes.length}/3 équipe{mesEquipes.length !== 1 ? "s" : ""} sélectionnée{mesEquipes.length !== 1 ? "s" : ""}
-            </Text>
-            {mesEquipes.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                {mesEquipes.map((e) => (
-                  <TouchableOpacity
-                    key={e.id}
-                    style={[styles.equipeChipSelected, { borderColor: e.couleur, backgroundColor: e.couleur + "22" }]}
-                    onPress={() => toggleEquipe(e)}
-                  >
-                    <View style={[styles.equipeChipDot, { backgroundColor: e.couleur }]} />
-                    <Text style={[styles.equipeChipText, { color: e.couleur }]}>{e.nom}</Text>
-                    <Text style={styles.equipeChipRemove}>✕</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            {/* Liste des équipes */}
-            <View style={styles.equipesGrid}>
-              {toutesEquipes.map((e) => {
-                const selected = mesEquipes.some((s) => s.id === e.id);
-                const logo = TEAM_LOGOS[e.nom];
-                return (
-                  <TouchableOpacity
-                    key={e.id}
-                    style={[
-                      styles.equipeGridItem,
-                      selected && { borderColor: e.couleur, borderWidth: 2, backgroundColor: e.couleur + "18" },
-                      !selected && mesEquipes.length >= 3 && styles.equipeGridItemDisabled,
-                    ]}
-                    onPress={() => toggleEquipe(e)}
-                    disabled={!selected && mesEquipes.length >= 3}
-                  >
-                    {logo ? (
-                      <Image source={logo} style={styles.equipeGridLogo} resizeMode="contain" />
-                    ) : (
-                      <View style={[styles.equipeColorBar, { backgroundColor: e.couleur }]} />
-                    )}
-                    <Text style={[styles.equipeGridNom, selected && { color: e.couleur, fontWeight: "700" }]}>
-                      {e.nom}
-                    </Text>
-                    {selected && <Text style={[styles.equipeGridCheck, { color: e.couleur }]}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Button onPress={handleSaveEquipes} disabled={saving}>
-              {saving ? "Enregistrement..." : "Enregistrer"}
-            </Button>
-          </Card>
-        )}
-
         <View style={{ marginTop: 8, marginBottom: 24 }}>
           <Button onPress={onLogout} variant="danger">Se déconnecter</Button>
         </View>
       </ScrollView>
+
+      {/* Modal Paramètres */}
+      <Modal visible={settingsVisible} animationType="slide" onRequestClose={() => setSettingsVisible(false)}>
+        <View style={styles.screen}>
+          <View style={styles.settingsHeader}>
+            <Text style={styles.settingsTitle}>Paramètres</Text>
+            <TouchableOpacity onPress={() => setSettingsVisible(false)} style={styles.settingsClose}>
+              <Text style={styles.settingsCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+            {success ? <View style={styles.successBox}><Text style={styles.successText}>✓ {success}</Text></View> : null}
+
+            {/* Modifier les infos */}
+            <TouchableOpacity style={styles.editSection} onPress={() => { setSection(section === "infos" ? null : "infos"); setError(""); setSuccess(""); }}>
+              <Text style={styles.editSectionTitle}>✏️ Modifier le profil</Text>
+              <Text style={styles.editSectionChevron}>{section === "infos" ? "▲" : "▼"}</Text>
+            </TouchableOpacity>
+            {section === "infos" && (
+              <Card style={styles.editCard}>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Text style={styles.fieldLabel}>Pseudo</Text>
+                <TextInput style={styles.input} value={form.pseudo} onChangeText={(v) => setForm((p) => ({ ...p, pseudo: v }))} autoCapitalize="none" />
+                <Text style={styles.fieldLabel}>Age</Text>
+                <TextInput style={styles.input} value={form.age} onChangeText={(v) => setForm((p) => ({ ...p, age: v }))} keyboardType="number-pad" placeholder="Non renseigné" />
+                <Text style={styles.fieldLabel}>Genre</Text>
+                <View style={styles.selectRow}>
+                  {GENRES.map((g) => (
+                    <TouchableOpacity key={g} style={[styles.selectOption, form.genre === g && styles.selectOptionActive]} onPress={() => setForm((p) => ({ ...p, genre: g }))}>
+                      <Text style={[styles.selectOptionText, form.genre === g && styles.selectOptionTextActive]}>{g.charAt(0).toUpperCase() + g.slice(1)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.fieldLabel}>Pays</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                  {PAYS.map(({ label, flag }) => (
+                    <TouchableOpacity key={label} style={[styles.chip, form.pays === label && styles.chipActive]} onPress={() => setForm((prev) => ({ ...prev, pays: label, region: "" }))}>
+                      <Text style={[styles.chipText, form.pays === label && styles.chipTextActive]}>{label} {flag}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {form.pays && REGIONS_BY_PAYS[form.pays] && (
+                  <>
+                    <Text style={styles.fieldLabel}>Région</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+                      {REGIONS_BY_PAYS[form.pays].map((r) => (
+                        <TouchableOpacity key={r} style={[styles.chip, form.region === r && styles.chipActive]} onPress={() => setForm((prev) => ({ ...prev, region: r }))}>
+                          <Text style={[styles.chipText, form.region === r && styles.chipTextActive]}>{r}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </>
+                )}
+                <Button onPress={handleSaveInfos} disabled={saving}>{saving ? "Sauvegarde..." : "Enregistrer"}</Button>
+              </Card>
+            )}
+
+            {/* Changer le mot de passe */}
+            <TouchableOpacity style={styles.editSection} onPress={() => { setSection(section === "password" ? null : "password"); setError(""); setSuccess(""); }}>
+              <Text style={styles.editSectionTitle}>🔒 Changer le mot de passe</Text>
+              <Text style={styles.editSectionChevron}>{section === "password" ? "▲" : "▼"}</Text>
+            </TouchableOpacity>
+            {section === "password" && (
+              <Card style={styles.editCard}>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Text style={styles.fieldLabel}>Mot de passe actuel</Text>
+                <TextInput style={styles.input} value={pwForm.current} onChangeText={(v) => setPwForm((p) => ({ ...p, current: v }))} secureTextEntry placeholder="••••••••" />
+                <Text style={styles.fieldLabel}>Nouveau mot de passe</Text>
+                <TextInput style={styles.input} value={pwForm.next} onChangeText={(v) => setPwForm((p) => ({ ...p, next: v }))} secureTextEntry placeholder="••••••••" />
+                <Text style={styles.fieldLabel}>Confirmer le nouveau mot de passe</Text>
+                <TextInput style={styles.input} value={pwForm.confirm} onChangeText={(v) => setPwForm((p) => ({ ...p, confirm: v }))} secureTextEntry placeholder="••••••••" />
+                <Text style={styles.pwHint}>Doit contenir : majuscule, minuscule, chiffre et caractère spécial (min. 8 caractères)</Text>
+                <Button onPress={handleChangePassword} disabled={saving}>{saving ? "Modification..." : "Changer le mot de passe"}</Button>
+              </Card>
+            )}
+
+            {/* Équipes esport */}
+            <TouchableOpacity style={styles.editSection} onPress={() => { const next = section === "equipes" ? null : "equipes"; setSection(next); setError(""); setSuccess(""); if (next === "equipes") loadEquipes(); }}>
+              <Text style={styles.editSectionTitle}>🎮 Mes équipes esport</Text>
+              <Text style={styles.editSectionChevron}>{section === "equipes" ? "▲" : "▼"}</Text>
+            </TouchableOpacity>
+            {section === "equipes" && (
+              <Card style={styles.editCard}>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Text style={styles.equipesHint}>{mesEquipes.length}/3 équipe{mesEquipes.length !== 1 ? "s" : ""} sélectionnée{mesEquipes.length !== 1 ? "s" : ""}</Text>
+                {mesEquipes.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                    {mesEquipes.map((e) => (
+                      <TouchableOpacity key={e.id} style={[styles.equipeChipSelected, { borderColor: e.couleur, backgroundColor: e.couleur + "22" }]} onPress={() => toggleEquipe(e)}>
+                        <View style={[styles.equipeChipDot, { backgroundColor: e.couleur }]} />
+                        <Text style={[styles.equipeChipText, { color: e.couleur }]}>{e.nom}</Text>
+                        <Text style={styles.equipeChipRemove}>✕</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                <View style={styles.equipesGrid}>
+                  {toutesEquipes.map((e) => {
+                    const selected = mesEquipes.some((s) => s.id === e.id);
+                    const logo = TEAM_LOGOS[e.nom];
+                    return (
+                      <TouchableOpacity
+                        key={e.id}
+                        style={[
+                          styles.equipeGridItem,
+                          selected && { borderColor: e.couleur, borderWidth: 2, backgroundColor: e.couleur + "18" },
+                          !selected && mesEquipes.length >= 3 && styles.equipeGridItemDisabled,
+                        ]}
+                        onPress={() => toggleEquipe(e)}
+                        disabled={!selected && mesEquipes.length >= 3}
+                      >
+                        {logo ? (
+                          <Image source={logo} style={styles.equipeGridLogo} resizeMode="contain" />
+                        ) : (
+                          <View style={[styles.equipeColorBar, { backgroundColor: e.couleur }]} />
+                        )}
+                        <Text style={[styles.equipeGridNom, selected && { color: e.couleur, fontWeight: "700" }]}>{e.nom}</Text>
+                        {selected && <Text style={[styles.equipeGridCheck, { color: e.couleur }]}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Button onPress={handleSaveEquipes} disabled={saving}>{saving ? "Enregistrement..." : "Enregistrer"}</Button>
+              </Card>
+            )}
+
+            <View style={{ height: 32 }} />
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1916,22 +1920,22 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgLight,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgWhite,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: colors.borderLight,
   },
   headerBrand: {
-    fontSize: 16,
+    fontSize: fontSize.xl,
     fontWeight: "800",
-    color: "#0f172a",
+    color: colors.textPrimary,
     letterSpacing: 0.3,
     textAlign: "center",
     flex: 1,
@@ -1944,7 +1948,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
     minWidth: 80,
     justifyContent: "flex-end",
   },
@@ -1956,14 +1960,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerIconEmoji: {
-    fontSize: 22,
+    fontSize: fontSize.xl4,
   },
   headerBadge: {
     position: "absolute",
     top: 0,
     right: 0,
-    backgroundColor: "#dc2626",
-    borderRadius: 8,
+    backgroundColor: colors.error,
+    borderRadius: radius.sm,
     minWidth: 16,
     height: 16,
     alignItems: "center",
@@ -1971,7 +1975,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   headerBadgeText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 10,
     fontWeight: "700",
   },
@@ -1990,28 +1994,28 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   headerAvatarText: {
-    color: "#ffffff",
-    fontSize: 16,
+    color: colors.white,
+    fontSize: fontSize.xl,
     fontWeight: "700",
   },
   headerStat: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     fontWeight: "600",
-    color: "#475569",
+    color: colors.textMuted,
   },
   content: {
     flex: 1,
   },
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgWhite,
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: colors.borderLight,
     paddingBottom: Platform.OS === "ios" ? 4 : 0,
   },
   tabBtn: {
@@ -2021,15 +2025,15 @@ const styles = StyleSheet.create({
   },
   tabBtnActive: {
     borderTopWidth: 2,
-    borderTopColor: "#2563eb",
+    borderTopColor: colors.primary,
   },
   tabLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
   },
   tabLabelActive: {
-    color: "#2563eb",
+    color: colors.primary,
     fontWeight: "700",
   },
   // Shared screen styles
@@ -2040,35 +2044,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#ffffff",
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.bgWhite,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: colors.borderLight,
   },
   screenTitle: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   chatNav: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#f8fafc",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.bgLight,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: colors.borderLight,
   },
   chatNavTitle: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   enJeuBanner: {
     backgroundColor: "#fef3c7",
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 6,
     alignItems: "center",
   },
@@ -2077,65 +2081,65 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-    padding: 16,
+    padding: spacing.xl,
   },
   // Filter bar (statut)
   filterBar: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgWhite,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderBottomColor: colors.bgSubtle,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   filterBarContent: {
-    gap: 8,
+    gap: spacing.sm,
     alignItems: "center",
   },
   filterBtn: {
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.borderMedium,
+    backgroundColor: colors.bgLight,
   },
   filterBtnActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterBtnText: {
-    fontSize: 13,
-    color: "#475569",
+    fontSize: fontSize.md,
+    color: colors.textMuted,
     fontWeight: "500",
   },
   filterBtnTextActive: {
-    color: "#ffffff",
+    color: colors.white,
   },
   // Category bar (sport/jeu)
   catBar: {
     flexDirection: "row",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgLight,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    borderBottomColor: colors.borderLight,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   catBarContent: {},
   catBtn: {
     flex: 1,
     alignItems: "center",
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: "transparent",
-    backgroundColor: "transparent",
+    borderColor: colors.transparent,
+    backgroundColor: colors.transparent,
   },
   catBtnActive: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   catBtnIcon: {
-    fontSize: 22,
+    fontSize: fontSize.xl4,
     marginBottom: 2,
   },
   catBtnImage: {
@@ -2146,29 +2150,29 @@ const styles = StyleSheet.create({
   catBtnLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
   },
   catBtnLabelActive: {
-    color: "#2563eb",
+    color: colors.primary,
   },
   pronosticCatIcon: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     marginRight: 6,
   },
   favoriteStarBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: spacing.sm,
+    right: spacing.sm,
     zIndex: 10,
   },
   favoriteStarText: {
-    fontSize: 16,
+    fontSize: fontSize.xl,
   },
   teamsHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   teamBlock: {
     flex: 1,
@@ -2177,81 +2181,81 @@ const styles = StyleSheet.create({
   teamLogo: {
     width: 56,
     height: 56,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   teamLogoPlaceholder: {
     width: 56,
     height: 56,
-    marginBottom: 4,
-    backgroundColor: "#e2e8f0",
+    marginBottom: spacing.xs,
+    backgroundColor: colors.borderLight,
     borderRadius: 28,
   },
   teamName: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
     textAlign: "center",
   },
   vsBlock: {
     alignItems: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
   },
   vsText: {
-    fontSize: 16,
+    fontSize: fontSize.xl,
     fontWeight: "800",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
     letterSpacing: 1,
   },
   tournoiText: {
-    fontSize: 11,
-    color: "#64748b",
+    fontSize: fontSize.xs,
+    color: colors.textSubtle,
     textAlign: "center",
     marginBottom: 6,
     fontStyle: "italic",
   },
   // Common
   error: {
-    color: "#dc2626",
-    fontSize: 13,
-    marginBottom: 8,
+    color: colors.error,
+    fontSize: fontSize.md,
+    marginBottom: spacing.sm,
   },
   empty: {
     textAlign: "center",
-    color: "#94a3b8",
-    marginTop: 24,
-    fontSize: 14,
+    color: colors.textPlaceholder,
+    marginTop: spacing.xl3,
+    fontSize: fontSize.base,
   },
   loader: {
-    marginVertical: 16,
+    marginVertical: spacing.xl,
   },
   centerBtn: {
     alignItems: "center",
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: spacing.xl,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 10,
   },
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: spacing.sm,
     marginTop: 10,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.borderMedium,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
-    backgroundColor: "#fff",
-    marginBottom: 8,
+    fontSize: fontSize.base,
+    backgroundColor: colors.bgWhite,
+    marginBottom: spacing.sm,
   },
   // Card content
   pronosticHeader: {
@@ -2261,66 +2265,66 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   pronosticTitre: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   badge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: radius.lg,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: "600",
-    color: "#ffffff",
+    color: colors.white,
   },
   prediction: {
-    fontSize: 13,
-    color: "#475569",
+    fontSize: fontSize.md,
+    color: colors.textMuted,
     fontStyle: "italic",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   pariDesc: {
-    fontSize: 13,
-    color: "#64748b",
+    fontSize: fontSize.md,
+    color: colors.textSubtle,
     marginBottom: 6,
   },
   meta: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: spacing.sm,
   },
   metaText: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   coinsBadge: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#334155",
+    color: colors.textSecondary,
   },
   gemsBadge: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: "500",
     color: "#7c3aed",
   },
   enJeuBadge: {
-    fontSize: 11,
-    color: "#f59e0b",
+    fontSize: fontSize.xs,
+    color: colors.warning,
     fontWeight: "500",
   },
   betSuccess: {
     backgroundColor: "#dcfce7",
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 10,
     marginBottom: 10,
   },
   betSuccessText: {
-    color: "#16a34a",
-    fontSize: 13,
+    color: colors.success,
+    fontSize: fontSize.md,
     fontWeight: "500",
   },
   betForm: {
@@ -2329,7 +2333,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   betCostText: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     color: "#92400e",
     fontWeight: "500",
     backgroundColor: "#fef9c3",
@@ -2340,7 +2344,7 @@ const styles = StyleSheet.create({
   },
   betMiseZone: {
     alignItems: "center",
-    gap: 4,
+    gap: spacing.xs,
   },
   betAdjustRow: {
     flexDirection: "row",
@@ -2349,98 +2353,121 @@ const styles = StyleSheet.create({
   },
   betAdjBtn: {
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.borderLight,
+    backgroundColor: colors.bgLight,
   },
   betAdjBtnPlus: {
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primaryLight,
     borderColor: "#bfdbfe",
   },
   betAdjBtnText: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     fontWeight: "700",
-    color: "#dc2626",
+    color: colors.error,
   },
   betAdjBtnTextPlus: {
-    color: "#2563eb",
+    color: colors.primary,
   },
   betMiseInput: {
     width: 90,
     fontSize: 26,
     fontWeight: "800",
-    color: "#0f172a",
+    color: colors.textPrimary,
     borderBottomWidth: 2,
-    borderBottomColor: "#2563eb",
-    paddingVertical: 4,
+    borderBottomColor: colors.primary,
+    paddingVertical: spacing.xs,
     textAlign: "center",
   },
   betMiseLabel: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
     fontWeight: "500",
   },
   parisFermeRow: {
     marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     backgroundColor: "#fef2f2",
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: "#fecaca",
   },
   parisFermeText: {
-    fontSize: 12,
-    color: "#dc2626",
+    fontSize: fontSize.sm,
+    color: colors.error,
     fontWeight: "600",
     textAlign: "center",
   },
+  maMiseRow: {
+    marginTop: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.successBg,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  maMiseText: {
+    fontSize: fontSize.md,
+    color: "#15803d",
+  },
+  maMiseCote: {
+    fontSize: fontSize.md,
+    color: "#15803d",
+  },
+  maMiseValue: {
+    fontWeight: "700",
+  },
   sectionHeader: {
-    marginTop: 16,
-    marginBottom: 4,
-    paddingHorizontal: 4,
+    marginTop: spacing.xl,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "700",
     color: "#1e293b",
   },
   enDirectBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fee2e2",
+    backgroundColor: colors.errorBg,
     borderRadius: 6,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   enDirectDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
-    backgroundColor: "#dc2626",
+    borderRadius: radius.xs,
+    backgroundColor: colors.error,
     marginRight: 5,
   },
   enDirectText: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: "700",
-    color: "#dc2626",
+    color: colors.error,
     letterSpacing: 0.5,
   },
   dejaParieRow: {
     marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#f0fdf4",
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.successBg,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#bbf7d0",
+    borderColor: colors.successBorder,
   },
   dejaParieText: {
-    fontSize: 13,
-    color: "#16a34a",
+    fontSize: fontSize.md,
+    color: colors.success,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -2451,7 +2478,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   betGemHint: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     color: "#7c3aed",
     fontWeight: "600",
   },
@@ -2460,38 +2487,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   communauteNom: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
     flex: 1,
   },
   communauteMembres: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   communauteDesc: {
-    fontSize: 13,
-    color: "#64748b",
-    marginBottom: 4,
+    fontSize: fontSize.md,
+    color: colors.textSubtle,
+    marginBottom: spacing.xs,
   },
   jeuLabel: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "700",
-    color: "#475569",
-    marginBottom: 8,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   jeuTag: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   // Classement
   classementMe: {
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.primaryLight,
     borderColor: "#bfdbfe",
   },
   classementTopMe: {
@@ -2499,67 +2526,67 @@ const styles = StyleSheet.create({
     borderColor: "#fde68a",
   },
   classementSectionLabel: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   classementDivider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 12,
-    gap: 8,
+    marginVertical: spacing.md,
+    gap: spacing.sm,
   },
   classementDividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: colors.borderLight,
   },
   classementDividerText: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
     fontWeight: "500",
   },
   classementItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
   classementRang: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     minWidth: 36,
   },
   classementInfo: {
     flex: 1,
   },
   classementPseudo: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   classementXp: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   classementCoins: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     fontWeight: "500",
-    color: "#475569",
+    color: colors.textMuted,
   },
   meTag: {
-    fontSize: 12,
-    color: "#2563eb",
+    fontSize: fontSize.sm,
+    color: colors.primary,
     fontWeight: "400",
   },
   // Chat
   chatMessages: {
     flex: 1,
-    padding: 16,
+    padding: spacing.xl,
   },
   bubbleRow: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   bubbleRowMine: {
     alignItems: "flex-end",
@@ -2568,81 +2595,81 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   bubbleAuthor: {
-    fontSize: 12,
-    color: "#2563eb",
+    fontSize: fontSize.sm,
+    color: colors.primary,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   bubble: {
     maxWidth: "80%",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: 16,
   },
   bubbleMine: {
-    backgroundColor: "#2563eb",
-    borderBottomRightRadius: 4,
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: spacing.xs,
   },
   bubbleOther: {
-    backgroundColor: "#f1f5f9",
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.bgSubtle,
+    borderBottomLeftRadius: spacing.xs,
   },
   bubbleText: {
-    fontSize: 14,
+    fontSize: fontSize.base,
   },
   bubbleTextMine: {
-    color: "#ffffff",
+    color: colors.white,
   },
   bubbleTextOther: {
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   bubbleTime: {
-    fontSize: 11,
-    color: "#94a3b8",
+    fontSize: fontSize.xs,
+    color: colors.textPlaceholder,
     marginTop: 2,
   },
   chatInputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
-    padding: 12,
-    backgroundColor: "#ffffff",
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: colors.bgWhite,
     borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: colors.borderLight,
   },
   chatInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    fontSize: 14,
+    borderColor: colors.borderMedium,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    fontSize: fontSize.base,
     maxHeight: 100,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgLight,
   },
   chatHeaderInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
   },
   chatAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   chatAvatarText: {
-    color: "#ffffff",
-    fontSize: 14,
+    color: colors.white,
+    fontSize: fontSize.base,
     fontWeight: "700",
   },
   // Classement Modal
   classementModalCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: colors.bgWhite,
+    borderRadius: radius.xl,
     padding: 20,
     width: "90%",
     maxWidth: 400,
@@ -2652,7 +2679,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 16,
+    marginBottom: spacing.xl,
   },
   // Modal
   modalOverlay: {
@@ -2662,29 +2689,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: colors.bgWhite,
+    borderRadius: radius.xl,
     padding: 20,
     width: "85%",
     maxWidth: 360,
   },
-  modalClose: {
+  modalAddFriendBtn: {
     position: "absolute",
-    top: 12,
-    right: 12,
-    padding: 4,
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 1,
   },
-  modalCloseText: {
-    fontSize: 16,
-    color: "#94a3b8",
+  modalAddFriendIcon: {
+    fontSize: 24,
   },
   // Profil
   profilInfo: {
     alignItems: "center",
-    paddingBottom: 16,
-    marginBottom: 16,
+    paddingBottom: spacing.xl,
+    marginBottom: spacing.xl,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: colors.bgSubtle,
+    overflow: "hidden",
+  },
+  profilBanner: {
+    width: "100%",
+    height: 120,
+    marginBottom: -44,
+    opacity: 0.3,
+  },
+  profilBannerImg: {
+    width: "100%",
+    height: "100%",
   },
   profilAvatarWrapper: {
     width: 88,
@@ -2697,18 +2734,18 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     borderWidth: 3,
-    borderColor: "#e2e8f0",
+    borderColor: colors.borderLight,
   },
   profilAvatar: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   profilAvatarText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 34,
     fontWeight: "700",
   },
@@ -2719,56 +2756,151 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#0f172a",
+    backgroundColor: colors.textPrimary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#ffffff",
+    borderColor: colors.white,
   },
   profilAvatarEditIcon: {
-    fontSize: 14,
+    fontSize: fontSize.base,
   },
   profilPseudo: {
-    fontSize: 20,
+    fontSize: fontSize.xl3,
     fontWeight: "700",
-    color: "#0f172a",
-    marginBottom: 4,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
   profilEmail: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 4,
+    fontSize: fontSize.base,
+    color: colors.textSubtle,
+    marginBottom: spacing.xs,
+  },
+  profilSettingsBtn: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 1,
+    padding: 6,
+  },
+  profilSettingsIcon: {
+    fontSize: fontSize.xl4,
+  },
+  settingsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.bgWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  settingsTitle: {
+    fontSize: fontSize.xl2,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  settingsClose: {
+    padding: spacing.xs,
+  },
+  settingsCloseText: {
+    fontSize: fontSize.xl2,
+    color: colors.textPlaceholder,
+  },
+  profilFriendCode: {
+    fontSize: fontSize.md,
+    color: colors.primary,
+    fontWeight: "600",
+    letterSpacing: 1,
+    marginTop: spacing.xs,
+    paddingHorizontal: 10,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.sm,
+    overflow: "hidden",
   },
   profilId: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   profilStats: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   stat: {
     alignItems: "center",
   },
   statValue: {
-    fontSize: 22,
+    fontSize: fontSize.xl4,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   statLabel: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
     marginTop: 2,
+  },
+  rankBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  rankBadgeIcon: {
+    width: 22,
+    height: 22,
+  },
+  rankBadgeName: {
+    fontSize: fontSize.md,
+    fontWeight: "700",
+  },
+  rankSection: {
+    marginHorizontal: spacing.xs,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.bgLight,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  rankIcon: {
+    width: 40,
+    height: 40,
+  },
+  rankName: {
+    fontSize: fontSize.lg,
+    fontWeight: "700",
+  },
+  rankNextLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textPlaceholder,
+  },
+  rankProgressBar: {
+    height: 6,
+    backgroundColor: colors.borderLight,
+    borderRadius: 3,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  rankProgressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  rankPerk: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.sm,
+    color: colors.textSubtle,
   },
   profilEquipesRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginTop: 12,
-    paddingTop: 12,
-    paddingHorizontal: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   profilEquipeItem: {
     flex: 1,
@@ -2785,17 +2917,17 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   profilEquipeNom: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontWeight: "600",
     textAlign: "center",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
   },
   // Amis
   searchRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   userPreview: {
     flexDirection: "row",
@@ -2804,180 +2936,180 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
+    borderTopColor: colors.bgSubtle,
   },
   previewAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   previewAvatarText: {
-    color: "#ffffff",
-    fontSize: 16,
+    color: colors.white,
+    fontSize: fontSize.xl,
     fontWeight: "700",
   },
   previewInfo: {
     flex: 1,
   },
   previewPseudo: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   previewMeta: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   sentLabel: {
-    fontSize: 13,
-    color: "#16a34a",
+    fontSize: fontSize.md,
+    color: colors.success,
     fontWeight: "600",
   },
   friendItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: spacing.sm,
   },
   friendPseudo: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   friendMeta: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
     marginTop: 2,
   },
   label: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 6,
   },
   successBox: {
     backgroundColor: "#dcfce7",
-    borderRadius: 8,
+    borderRadius: radius.sm,
     padding: 10,
     marginBottom: 10,
   },
   successText: {
-    color: "#16a34a",
-    fontSize: 13,
+    color: colors.success,
+    fontSize: fontSize.md,
     fontWeight: "600",
   },
   editSection: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-    borderRadius: 10,
+    backgroundColor: colors.bgWhite,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 8,
+    borderColor: colors.borderLight,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
   editSectionTitle: {
-    fontSize: 15,
+    fontSize: fontSize.lg,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   editSectionChevron: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
   },
   editCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: fontSize.sm,
     fontWeight: "600",
-    color: "#64748b",
-    marginBottom: 4,
-    marginTop: 4,
+    color: colors.textSubtle,
+    marginBottom: spacing.xs,
+    marginTop: spacing.xs,
   },
   selectRow: {
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   selectOption: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: colors.borderMedium,
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgLight,
   },
   selectOptionActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   selectOptionText: {
-    fontSize: 13,
-    color: "#475569",
+    fontSize: fontSize.md,
+    color: colors.textMuted,
     fontWeight: "500",
   },
   selectOptionTextActive: {
-    color: "#ffffff",
+    color: colors.white,
   },
   chipsScroll: {
     marginBottom: 10,
   },
   chip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
-    marginRight: 8,
+    borderColor: colors.borderMedium,
+    backgroundColor: colors.bgLight,
+    marginRight: spacing.sm,
   },
   chipActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
-    fontSize: 13,
-    color: "#475569",
+    fontSize: fontSize.md,
+    color: colors.textMuted,
     fontWeight: "500",
   },
   chipTextActive: {
-    color: "#ffffff",
+    color: colors.white,
   },
   // Boutique
   boutiqueHero: {
-    backgroundColor: "#eff6ff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
     alignItems: "center",
   },
   boutiqueHeroText: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
-    color: "#0f172a",
-    marginBottom: 4,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
   },
   boutiqueHeroSub: {
-    fontSize: 13,
-    color: "#64748b",
+    fontSize: fontSize.md,
+    color: colors.textSubtle,
     textAlign: "center",
   },
   articleCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   articleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
   articleEmoji: {
     fontSize: 28,
@@ -2988,27 +3120,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   articleNom: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "600",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 2,
   },
   articleDesc: {
-    fontSize: 12,
-    color: "#64748b",
+    fontSize: fontSize.sm,
+    color: colors.textSubtle,
   },
   acheterBtn: {
-    backgroundColor: "#2563eb",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: "center",
     minWidth: 60,
   },
   acheterBtnPrix: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     fontWeight: "700",
-    color: "#ffffff",
+    color: colors.white,
   },
   acheterBtnLabel: {
     fontSize: 10,
@@ -3020,61 +3152,61 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   bientotText: {
-    fontSize: 13,
-    color: "#94a3b8",
+    fontSize: fontSize.md,
+    color: colors.textPlaceholder,
   },
   // Alertes
   alerteBadge: {
-    backgroundColor: "#dc2626",
-    borderRadius: 12,
-    paddingHorizontal: 8,
+    backgroundColor: colors.error,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     minWidth: 24,
     alignItems: "center",
   },
   alerteBadgeText: {
-    color: "#ffffff",
-    fontSize: 13,
+    color: colors.white,
+    fontSize: fontSize.md,
     fontWeight: "700",
   },
   alerteSectionTitle: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 10,
   },
   alerteCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   alerteRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
     marginBottom: 10,
   },
   alerteAvatar: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   alerteAvatarText: {
-    color: "#ffffff",
-    fontSize: 18,
+    color: colors.white,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
   },
   alerteInfo: {
     flex: 1,
   },
   alerteTitle: {
-    fontSize: 14,
-    color: "#0f172a",
+    fontSize: fontSize.base,
+    color: colors.textPrimary,
   },
   alerteTime: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
     marginTop: 2,
   },
   alertesOverlay: {
@@ -3086,39 +3218,39 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   alertesSheet: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgWhite,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "75%",
-    paddingBottom: Platform.OS === "ios" ? 24 : 16,
+    paddingBottom: Platform.OS === "ios" ? 24 : spacing.xl,
   },
   alertesSheetHandle: {
     width: 40,
     height: 4,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: colors.borderLight,
     borderRadius: 2,
     alignSelf: "center",
-    marginTop: 12,
-    marginBottom: 4,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   alertesSheetHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: colors.bgSubtle,
   },
   alertesSheetTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
   },
   alertesSheetClose: {
-    fontSize: 18,
-    color: "#94a3b8",
-    paddingHorizontal: 4,
+    fontSize: fontSize.xl2,
+    color: colors.textPlaceholder,
+    paddingHorizontal: spacing.xs,
   },
   alerteVide: {
     alignItems: "center",
@@ -3126,17 +3258,17 @@ const styles = StyleSheet.create({
   },
   alerteVideEmoji: {
     fontSize: 48,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   alerteVideTitle: {
-    fontSize: 18,
+    fontSize: fontSize.xl2,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 6,
   },
   alerteVideSub: {
-    fontSize: 14,
-    color: "#94a3b8",
+    fontSize: fontSize.base,
+    color: colors.textPlaceholder,
   },
   confirmOverlay: {
     flex: 1,
@@ -3145,7 +3277,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   confirmCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgWhite,
     borderRadius: 18,
     padding: 24,
     width: "80%",
@@ -3158,13 +3290,13 @@ const styles = StyleSheet.create({
   confirmTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 10,
     textAlign: "center",
   },
   confirmMsg: {
-    fontSize: 14,
-    color: "#475569",
+    fontSize: fontSize.base,
+    color: colors.textMuted,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
@@ -3175,74 +3307,74 @@ const styles = StyleSheet.create({
   },
   confirmBtnCancel: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: colors.borderMedium,
     alignItems: "center",
   },
   confirmBtnCancelText: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "600",
-    color: "#475569",
+    color: colors.textMuted,
   },
   confirmBtnDelete: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#dc2626",
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.error,
     alignItems: "center",
   },
   confirmBtnDeleteText: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "700",
-    color: "#ffffff",
+    color: colors.white,
   },
   equipesHint: {
-    fontSize: 12,
-    color: "#94a3b8",
-    marginBottom: 8,
+    fontSize: fontSize.sm,
+    color: colors.textPlaceholder,
+    marginBottom: spacing.sm,
   },
   equipeChipSelected: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderRadius: 20,
+    borderRadius: radius.full,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginRight: 8,
+    marginRight: spacing.sm,
     gap: 5,
   },
   equipeChipDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: radius.xs,
   },
   equipeChipText: {
-    fontSize: 13,
+    fontSize: fontSize.md,
     fontWeight: "600",
   },
   equipeChipRemove: {
-    fontSize: 11,
-    color: "#94a3b8",
+    fontSize: fontSize.xs,
+    color: colors.textPlaceholder,
     marginLeft: 2,
   },
   equipesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   equipeGridItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
-    gap: 8,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.bgLight,
+    gap: spacing.sm,
     minWidth: "45%",
     flex: 1,
   },
@@ -3260,17 +3392,17 @@ const styles = StyleSheet.create({
   },
   equipeGridNom: {
     flex: 1,
-    fontSize: 13,
-    color: "#0f172a",
+    fontSize: fontSize.md,
+    color: colors.textPrimary,
     fontWeight: "500",
   },
   equipeGridCheck: {
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontWeight: "700",
   },
   pwHint: {
-    fontSize: 11,
-    color: "#94a3b8",
+    fontSize: fontSize.xs,
+    color: colors.textPlaceholder,
     marginBottom: 10,
     lineHeight: 16,
   },
@@ -3280,17 +3412,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   commuTag: {
-    backgroundColor: "#eff6ff",
-    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.lg,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   commuTagText: {
-    fontSize: 12,
-    color: "#2563eb",
+    fontSize: fontSize.sm,
+    color: colors.primary,
     fontWeight: "500",
   },
   formCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
 });

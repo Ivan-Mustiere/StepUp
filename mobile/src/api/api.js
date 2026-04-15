@@ -193,6 +193,10 @@ export function getFriends() {
   return request("/api/v1/friends");
 }
 
+export function searchByFriendCode(code) {
+  return request(`/api/v1/friends/search?code=${encodeURIComponent(code)}`);
+}
+
 export function getFriendRequestsIncoming() {
   return request("/api/v1/friends/requests/incoming");
 }
@@ -265,12 +269,24 @@ export function changePassword(currentPassword, newPassword) {
 }
 
 export async function uploadAvatar(imageUri) {
-  const filename = imageUri.split("/").pop();
+  const rawName = imageUri.split("/").pop().split("?")[0];
+  const filename = rawName || "avatar.jpg";
   const ext = filename.split(".").pop().toLowerCase();
   const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 
   const formData = new FormData();
-  formData.append("file", { uri: imageUri, name: filename, type: mimeType });
+
+  // En mode web (Expo Web), imageUri est une data: URI ou blob: URL.
+  // fetch/FormData du navigateur ne comprend pas { uri, name, type }.
+  // Il faut convertir en Blob avant d'appender.
+  if (imageUri.startsWith("data:") || imageUri.startsWith("blob:")) {
+    const res = await fetch(imageUri);
+    const blob = await res.blob();
+    formData.append("file", blob, filename);
+  } else {
+    // Mode natif React Native : { uri, name, type } est géré par le fetch natif.
+    formData.append("file", { uri: imageUri, name: filename, type: mimeType });
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/v1/users/me/avatar`, {
     method: "POST",

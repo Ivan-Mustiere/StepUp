@@ -136,8 +136,8 @@ async def upload_avatar(file: UploadFile = File(...), current_user=Depends(_get_
     if len(content) > AVATAR_MAX_SIZE:
         raise HTTPException(status_code=400, detail="Image trop grande (5 Mo maximum).")
 
-    ext = "jpg" if file.content_type == "image/jpeg" else file.content_type.split("/")[1]
-    filename = f"{current_user['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+    # On convertit toujours en JPEG → toujours .jpg pour cohérence Content-Type.
+    filename = f"{current_user['id']}_{uuid.uuid4().hex[:8]}.jpg"
     filepath = os.path.join(AVATARS_DIR, filename)
 
     # Redimensionner à 256×256 max
@@ -181,14 +181,29 @@ async def get_user_profile(user_id: int, current_user=Depends(_get_current_user)
             await cur.execute(
                 """
                 SELECT u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip, u.date_creation,
-                       ARRAY_REMOVE(ARRAY_AGG(c.nom ORDER BY c.nom), NULL) AS communautes
+                       ARRAY_REMOVE(ARRAY_AGG(c.nom ORDER BY c.nom), NULL) AS communautes,
+                       COALESCE(
+                           (SELECT JSON_AGG(
+                                JSON_BUILD_OBJECT('id', e.id, 'nom', e.nom, 'couleur', e.couleur)
+                                ORDER BY e.nom
+                            )
+                            FROM user_equipes_esport uee
+                            JOIN equipes_esport e ON e.id = uee.equipe_id
+                            WHERE uee.user_id = u.id),
+                           '[]'::json
+                       ) AS equipes,
+                       EXISTS (
+                           SELECT 1 FROM user_friends
+                           WHERE (user_id = %s AND friend_user_id = u.id)
+                              OR (user_id = u.id AND friend_user_id = %s)
+                       ) AS is_friend
                 FROM users u
                 LEFT JOIN user_communautes uc ON uc.user_id = u.id
                 LEFT JOIN communautes c ON c.id = uc.communaute_id
                 WHERE u.id = %s
                 GROUP BY u.id, u.pseudo, u.avatar, u.coins, u.xp_total, u.vip, u.date_creation
                 """,
-                (user_id,),
+                (current_user["id"], current_user["id"], user_id),
             )
             row = await cur.fetchone()
             if not row:
