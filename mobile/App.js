@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -11,7 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Images } from "./src/assets/images";
 import { StatusBar } from "expo-status-bar";
+import { colors } from "./src/styles/colors";
 import {
   dailyReward,
   getMyProfile,
@@ -135,7 +138,7 @@ export default function App() {
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </SafeAreaView>
     );
   }
@@ -158,13 +161,17 @@ export default function App() {
           <View style={styles.rewardOverlay}>
             <View style={styles.rewardCard}>
               <Text style={styles.rewardTitle}>Récompense journalière 🎁</Text>
-              <Text style={styles.rewardCoins}>+{rewardData?.coins_gagnes} 🪙</Text>
+              <View style={styles.rewardCoinsRow}>
+                <Text style={styles.rewardCoins}>+{rewardData?.coins_gagnes}</Text>
+                <Image source={Images.coin} style={styles.rewardIcon} />
+              </View>
               <Text style={styles.rewardStreak}>
                 🔥 Streak : {rewardData?.strick} jour{rewardData?.strick > 1 ? "s" : ""}
               </Text>
-              <Text style={styles.rewardTotal}>
-                Total : {rewardData?.coins_total} 🪙
-              </Text>
+              <View style={styles.rewardTotalRow}>
+                <Text style={styles.rewardTotal}>Total : {rewardData?.coins_total}</Text>
+                <Image source={Images.coin} style={styles.rewardIconSm} />
+              </View>
               <TouchableOpacity
                 style={styles.rewardBtn}
                 onPress={() => { setRewardData(null); refreshProfile(); }}
@@ -299,13 +306,13 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgWhite,
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgWhite,
   },
   scroll: {
     padding: 24,
@@ -313,7 +320,7 @@ const styles = StyleSheet.create({
   h1: {
     fontSize: 32,
     fontWeight: "800",
-    color: "#0f172a",
+    color: colors.textPrimary,
     textAlign: "center",
     marginBottom: 24,
     marginTop: 16,
@@ -321,13 +328,13 @@ const styles = StyleSheet.create({
   h2: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 16,
     textAlign: "center",
   },
   switchRow: {
     flexDirection: "row",
-    backgroundColor: "#f1f5f9",
+    backgroundColor: colors.bgSubtle,
     borderRadius: 10,
     padding: 4,
     marginBottom: 24,
@@ -339,33 +346,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   switchBtnActive: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgLight,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 2,
   },
   switchBtnText: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#94a3b8",
+    color: colors.textPlaceholder,
   },
   switchBtnTextActive: {
-    color: "#0f172a",
+    color: colors.textPrimary,
     fontWeight: "700",
   },
   form: {
     gap: 12,
   },
   input: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgLight,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: colors.borderMedium,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
+    color: colors.textPrimary,
   },
   selectRow: {
     flexDirection: "row",
@@ -376,36 +384,36 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: colors.borderMedium,
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.bgLight,
   },
   selectOptionActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   selectOptionText: {
     fontSize: 13,
-    color: "#475569",
+    color: colors.textMuted,
     fontWeight: "500",
   },
   selectOptionTextActive: {
-    color: "#ffffff",
+    color: colors.white,
   },
   btn: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 4,
   },
   btnText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 16,
     fontWeight: "700",
   },
   error: {
-    color: "#dc2626",
+    color: colors.error,
     fontSize: 13,
     textAlign: "center",
     marginBottom: 8,
@@ -413,7 +421,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#64748b",
+    color: colors.textSubtle,
     marginBottom: 6,
   },
   chipsScroll: {
@@ -424,72 +432,95 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.borderMedium,
+    backgroundColor: colors.bgLight,
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   chipText: {
     fontSize: 13,
-    color: "#475569",
+    color: colors.textMuted,
     fontWeight: "500",
   },
   chipTextActive: {
-    color: "#ffffff",
+    color: colors.white,
   },
   rewardOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.65)",
     alignItems: "center",
     justifyContent: "center",
   },
   rewardCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bgLight,
     borderRadius: 20,
     padding: 32,
     width: "80%",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  rewardCoinsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  rewardTotalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 24,
+  },
+  rewardIcon: {
+    width: 36,
+    height: 36,
+    resizeMode: "contain",
+  },
+  rewardIconSm: {
+    width: 16,
+    height: 16,
+    resizeMode: "contain",
   },
   rewardTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#0f172a",
+    color: colors.textPrimary,
     marginBottom: 16,
     textAlign: "center",
   },
   rewardCoins: {
     fontSize: 42,
     fontWeight: "800",
-    color: "#d97706",
+    color: "#f59e0b",
     marginBottom: 8,
   },
   rewardStreak: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#ea580c",
+    color: colors.primary,
     marginBottom: 4,
   },
   rewardTotal: {
     fontSize: 13,
-    color: "#64748b",
-    marginBottom: 24,
+    color: colors.textSubtle,
   },
   rewardBtn: {
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.primary,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 40,
   },
   rewardBtnText: {
-    color: "#ffffff",
+    color: colors.white,
     fontSize: 16,
     fontWeight: "700",
   },

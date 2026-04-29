@@ -1,30 +1,21 @@
-/**
- * Configuration des rangs StepUp.
- * Chaque rang est lié à un seuil d'XP et embarque tous ses paramètres.
- *
- * Pour ajouter un perk :
- *   1. Ajoute le champ ici dans chaque rang.
- *   2. Utilise getRank(xp).monChamp là où tu en as besoin.
- */
-
 export const RANKS = [
   {
     id: "bronze",
     name: "Bronze",
     minXp: 0,
-    image: require("../assets/images/Elo/bronze.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Bronze.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Bronze.png"),
     color: "#cd7f32",
-    banner: null,
-    discount: 0,           // % de réduction en boutique
-    specialAccess: [],     // ex: ["early_access", "vip_chat"]
+    discount: 0,
+    specialAccess: [],
   },
   {
     id: "silver",
     name: "Silver",
     minXp: 500,
-    image: require("../assets/images/Elo/silver.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Silver.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Silver.png"),
     color: "#a8a9ad",
-    banner: null,
     discount: 5,
     specialAccess: [],
   },
@@ -32,9 +23,9 @@ export const RANKS = [
     id: "gold",
     name: "Gold",
     minXp: 1500,
-    image: require("../assets/images/Elo/gold.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Gold.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Gold.png"),
     color: "#ffd700",
-    banner: null,
     discount: 10,
     specialAccess: [],
   },
@@ -42,9 +33,9 @@ export const RANKS = [
     id: "platine",
     name: "Platine",
     minXp: 3000,
-    image: require("../assets/images/Elo/platine.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Platine.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Platine.png"),
     color: "#00c8ff",
-    banner: null,
     discount: 15,
     specialAccess: [],
   },
@@ -52,9 +43,9 @@ export const RANKS = [
     id: "diamant",
     name: "Diamant",
     minXp: 5000,
-    image: require("../assets/images/Elo/diamant.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Diamant.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Diamant.png"),
     color: "#b9f2ff",
-    banner: null,
     discount: 20,
     specialAccess: ["early_access"],
   },
@@ -62,9 +53,9 @@ export const RANKS = [
     id: "emeraude",
     name: "Émeraude",
     minXp: 8000,
-    image: require("../assets/images/Elo/emeraude.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Emeraude.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Emeraude.png"),
     color: "#50c878",
-    banner: null,
     discount: 25,
     specialAccess: ["early_access", "vip_chat"],
   },
@@ -72,39 +63,24 @@ export const RANKS = [
     id: "master",
     name: "Master",
     minXp: 12000,
-    image: require("../assets/images/Elo/master.png"),
+    image:   require("../assets/images/Elo/badges/Badges_Master.png"),
+    banner:  require("../assets/images/Elo/bannieres/Bannieres_Master.png"),
     color: "#9b59b6",
-    banner: null,
     discount: 30,
     specialAccess: ["early_access", "vip_chat", "beta_features"],
   },
 ];
 
-/**
- * Retourne le rang correspondant à un total d'XP.
- * @param {number} xp
- * @returns {object} rang
- */
 export function getRank(xp = 0) {
   return [...RANKS].reverse().find((r) => xp >= r.minXp) ?? RANKS[0];
 }
 
-/**
- * Retourne le prochain rang (null si déjà Master).
- * @param {number} xp
- * @returns {object|null}
- */
 export function getNextRank(xp = 0) {
   const current = getRank(xp);
   const idx = RANKS.findIndex((r) => r.id === current.id);
   return RANKS[idx + 1] ?? null;
 }
 
-/**
- * Retourne la progression (0–1) vers le prochain rang.
- * @param {number} xp
- * @returns {number} entre 0 et 1
- */
 export function getRankProgress(xp = 0) {
   const current = getRank(xp);
   const next = getNextRank(xp);

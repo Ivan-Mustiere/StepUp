@@ -1,34 +1,33 @@
-// Palette de couleurs de l'application
 export const colors = {
   // Primaire
-  primary:        "#2563eb",
-  primaryLight:   "#eff6ff",
+  primary:        "#FF3300",
+  primaryLight:   "rgba(255,51,0,0.15)",
 
   // Texte
-  textPrimary:    "#0f172a",
-  textSecondary:  "#334155",
-  textMuted:      "#475569",
-  textSubtle:     "#64748b",
-  textPlaceholder:"#94a3b8",
+  textPrimary:    "#FFFAFA",
+  textSecondary:  "#E8E4E4",
+  textMuted:      "#C4BEBE",
+  textSubtle:     "#A09A9A",
+  textPlaceholder:"#7A7474",
 
   // Fond
-  bgWhite:        "#ffffff",
-  bgLight:        "#f8fafc",
-  bgSubtle:       "#f1f5f9",
+  bgWhite:        "#000023",
+  bgLight:        "#05052e",
+  bgSubtle:       "#0a0a38",
 
   // Bordures
-  borderLight:    "#e2e8f0",
-  borderMedium:   "#cbd5e1",
+  borderLight:    "#1a1a4a",
+  borderMedium:   "#252560",
 
   // État — succès
   success:        "#16a34a",
-  successBg:      "#f0fdf4",
-  successBorder:  "#bbf7d0",
+  successBg:      "#0a1f0a",
+  successBorder:  "#1a5c1a",
 
   // État — erreur
-  error:          "#dc2626",
-  errorBg:        "#fee2e2",
-  errorBorder:    "#fca5a5",
+  error:          "#FF3300",
+  errorBg:        "#1a0500",
+  errorBorder:    "#660f00",
 
   // État — avertissement
   warning:        "#f59e0b",
@@ -37,6 +36,6 @@ export const colors = {
   indigo:         "#6366f1",
 
   // Utilitaires
-  white:          "#ffffff",
+  white:          "#FFFAFA",
   transparent:    "transparent",
 };

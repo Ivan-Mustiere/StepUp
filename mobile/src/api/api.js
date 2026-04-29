@@ -182,10 +182,17 @@ export function getParis(queryString = "") {
   return request(`/api/v1/paris${queryString ? `?${queryString}` : ""}`);
 }
 
-export function placeBet(pariId, mise) {
+export function reglerPari(pariId, equipeGagnante) {
+  return request(`/api/v1/admin/paris/${pariId}/regler`, {
+    method: "POST",
+    body: JSON.stringify({ equipe_gagnante: equipeGagnante }),
+  });
+}
+
+export function placeBet(pariId, mise, equipeChoisie) {
   return request(`/api/v1/paris/${pariId}/miser`, {
     method: "POST",
-    body: JSON.stringify({ mise }),
+    body: JSON.stringify({ mise, equipe_choisie: equipeChoisie ?? null }),
   });
 }
 

@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/v1/paris", tags=["paris"])
 
 class MiseCreate(BaseModel):
     mise: int
+    equipe_choisie: str | None = None
 
 
 @router.get("")
@@ -30,7 +31,8 @@ async def list_paris(
             await cur.execute(
                 """
                 SELECT pa.id, pa.description, pa.mise_min, pa.statut, pa.created_at,
-                       pa.date_debut, p.titre, p.prediction, p.cote, p.categorie, u.pseudo AS auteur,
+                       pa.date_debut, p.titre, p.prediction, p.cote,
+                       p.cote_team1, p.cote_team2, p.categorie, u.pseudo AS auteur,
                        EXISTS (
                            SELECT 1 FROM user_paris_actifs upa
                            WHERE upa.pari_id = pa.id AND upa.user_id = %s
@@ -38,7 +40,11 @@ async def list_paris(
                        (
                            SELECT upa.mise FROM user_paris_actifs upa
                            WHERE upa.pari_id = pa.id AND upa.user_id = %s
-                       ) AS ma_mise
+                       ) AS ma_mise,
+                       (
+                           SELECT upa.equipe_choisie FROM user_paris_actifs upa
+                           WHERE upa.pari_id = pa.id AND upa.user_id = %s
+                       ) AS mon_equipe
                 FROM paris pa
                 JOIN pronostics p ON p.id = pa.pronostic_id
                 JOIN users u ON u.id = pa.admin_user_id
@@ -56,7 +62,7 @@ async def list_paris(
                     pa.created_at ASC
                 LIMIT %s OFFSET %s
                 """,
-                (current_user["id"], current_user["id"], current_user["id"], limit, offset),
+                (current_user["id"], current_user["id"], current_user["id"], current_user["id"], limit, offset),
             )
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
@@ -69,7 +75,16 @@ async def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get
 
     async with _db.get_db() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT id, mise_min, statut, date_debut FROM paris WHERE id = %s", (pari_id,))
+            await cur.execute(
+                """
+                SELECT pa.id, pa.mise_min, pa.statut, pa.date_debut,
+                       p.cote_team1, p.cote_team2, p.titre
+                FROM paris pa
+                JOIN pronostics p ON p.id = pa.pronostic_id
+                WHERE pa.id = %s
+                """,
+                (pari_id,),
+            )
             pari = await cur.fetchone()
             if not pari:
                 raise HTTPException(status_code=404, detail="Pari introuvable.")
@@ -109,6 +124,19 @@ async def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get
             if await cur.fetchone():
                 raise HTTPException(status_code=409, detail="Vous avez déjà parié sur ce match.")
 
+            # Figer la cote au moment du pari
+            cote_appliquee = None
+            if payload.equipe_choisie and pari["cote_team1"] and pari["cote_team2"]:
+                import re as _re
+                titre = pari["titre"] or ""
+                match_part = _re.split(r"\s*[—–-]+\s*", titre)[0]
+                vs_parts = _re.split(r"\s+vs\.?\s+", match_part, flags=_re.IGNORECASE)
+                team1_raw = vs_parts[0].strip().lower() if len(vs_parts) >= 2 else ""
+                if payload.equipe_choisie.strip().lower() == team1_raw:
+                    cote_appliquee = float(pari["cote_team1"])
+                else:
+                    cote_appliquee = float(pari["cote_team2"])
+
             xp_gagne = 10 + min(payload.mise // 50, 40)
             await cur.execute(
                 """
@@ -125,11 +153,11 @@ async def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get
 
             await cur.execute(
                 """
-                INSERT INTO user_paris_actifs (user_id, pari_id, mise)
-                VALUES (%s, %s, %s)
+                INSERT INTO user_paris_actifs (user_id, pari_id, mise, equipe_choisie, cote_appliquee)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (current_user["id"], pari_id, payload.mise),
+                (current_user["id"], pari_id, payload.mise, payload.equipe_choisie, cote_appliquee),
             )
 
             await cur.execute(
@@ -139,7 +167,7 @@ async def place_bet(pari_id: int, payload: MiseCreate, current_user=Depends(_get
                 """,
                 (
                     current_user["id"],
-                    json.dumps({"pari_id": pari_id, "mise": payload.mise, "statut": "en_cours"}),
+                    json.dumps({"pari_id": pari_id, "mise": payload.mise, "equipe_choisie": payload.equipe_choisie, "cote_appliquee": cote_appliquee, "statut": "en_cours"}),
                 ),
             )
 

@@ -2,6 +2,7 @@ import { Pedometer } from "expo-sensors";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -10,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
+import { Images } from "../assets/images";
+import Svg, { Defs, LinearGradient, Path, Stop, Text as SvgText } from "react-native-svg";
 import { syncSteps, getTodaySteps } from "../api/api";
 import Button from "../components/Button";
 import { colors, fontSize, spacing, radius, shadow } from "../styles";
@@ -20,11 +22,11 @@ const GOAL = 10000;
 
 // ─── Speedometer SVG ────────────────────────────────────────────────────────
 
-const SIZE = 280;
+const SIZE = 340;
 const CX = SIZE / 2;
 const CY = SIZE / 2 + 10;
-const R_OUTER = 118;
-const R_INNER = 90;
+const R_OUTER = 148;
+const R_INNER = 112;
 const START_ANGLE = 150;
 const END_ANGLE   = 390;
 
@@ -59,35 +61,17 @@ function ringPath(cx, cy, rOuter, rInner, startDeg, endDeg) {
   ].join(" ");
 }
 
-function fillColor(progress) {
-  if (progress >= 1)   return colors.success;
-  if (progress >= 0.7) return colors.warning;
-  if (progress >= 0.4) return colors.primary;
-  return colors.indigo;
-}
-
 const MILESTONES = [0, 2500, 5000, 7500, 10000];
 
 function Speedometer({ steps }) {
   const progress = Math.min(steps / GOAL, 1);
   const fillEnd = START_ANGLE + progress * (END_ANGLE - START_ANGLE);
-  const color = fillColor(progress);
-
-  const needleAngle = START_ANGLE + progress * (END_ANGLE - START_ANGLE);
-  const needleTip = polarXY(CX, CY, R_INNER - 6, needleAngle);
-  const needleBase1 = polarXY(CX, CY, 12, needleAngle + 90);
-  const needleBase2 = polarXY(CX, CY, 12, needleAngle - 90);
 
   return (
+  <View style={{ alignSelf: "center" }}>
+    <View style={{ width: SIZE, height: SIZE - 20 }}>
     <Svg width={SIZE} height={SIZE - 20} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-      <Defs>
-        <LinearGradient id="fillGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <Stop offset="0%"   stopColor={colors.indigo} />
-          <Stop offset="50%"  stopColor={colors.primary} />
-          <Stop offset="80%"  stopColor={colors.warning} />
-          <Stop offset="100%" stopColor={colors.success} />
-        </LinearGradient>
-      </Defs>
+      <Defs />
 
       {/* Piste grise */}
       <Path
@@ -99,7 +83,7 @@ function Speedometer({ steps }) {
       {progress > 0 && (
         <Path
           d={ringPath(CX, CY, R_OUTER, R_INNER, START_ANGLE, fillEnd)}
-          fill="url(#fillGrad)"
+          fill={colors.primary}
         />
       )}
 
@@ -115,7 +99,7 @@ function Speedometer({ steps }) {
           <React.Fragment key={m}>
             <Path
               d={`M ${inner.x} ${inner.y} L ${outer.x} ${outer.y}`}
-              stroke={reached ? color : colors.textPlaceholder}
+              stroke={reached ? colors.primary : colors.textPlaceholder}
               strokeWidth={m % 5000 === 0 ? 2.5 : 1.5}
             />
             {m % 5000 === 0 && (
@@ -134,45 +118,36 @@ function Speedometer({ steps }) {
         );
       })}
 
-      {/* Aiguille */}
-      <Path
-        d={`M ${needleBase1.x} ${needleBase1.y} L ${needleTip.x} ${needleTip.y} L ${needleBase2.x} ${needleBase2.y} Z`}
-        fill={color}
-        opacity={0.9}
-      />
-      <Circle cx={CX} cy={CY} r={10} fill={colors.textPrimary} />
-      <Circle cx={CX} cy={CY} r={5}  fill={colors.white} />
 
-      {/* Pas (centre) */}
-      <SvgText
-        x={CX} y={CY - 18}
-        textAnchor="middle"
-        fontSize={44}
-        fontWeight="800"
-        fill={colors.textPrimary}
-      >
-        {steps.toLocaleString("fr-FR")}
-      </SvgText>
-      <SvgText
-        x={CX} y={CY + 10}
-        textAnchor="middle"
-        fontSize={15}
-        fill={colors.textSubtle}
-        fontWeight="500"
-      >
-        pas
-      </SvgText>
-
-      {/* Objectif en bas */}
-      <SvgText
-        x={CX} y={CY + 58}
-        textAnchor="middle"
-        fontSize={12}
-        fill={colors.textPlaceholder}
-      >
-        objectif {GOAL.toLocaleString("fr-FR")} pas
-      </SvgText>
     </Svg>
+
+    {/* Logo XP + pas en overlay absolu centré */}
+    <View style={{
+      position: "absolute",
+      top: Math.round(CY * (SIZE - 20) / SIZE) - 80,
+      left: 0, right: 0,
+      alignItems: "center",
+    }}>
+      <Image source={Images.xp} style={{ width: 130, height: 130, resizeMode: "contain" }} />
+      <Text style={{
+        fontSize: 38,
+        fontWeight: "800",
+        color: colors.textPrimary,
+        letterSpacing: 1,
+        marginTop: 2,
+      }}>
+        {steps.toLocaleString("fr-FR")}
+      </Text>
+      <Text style={{
+        fontSize: 13,
+        color: colors.textSubtle,
+        marginTop: 2,
+      }}>
+        pas / objectif {GOAL.toLocaleString("fr-FR")}
+      </Text>
+    </View>
+    </View>
+  </View>
   );
 }
 
@@ -278,13 +253,13 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
       {/* Gems du jour */}
       <View style={styles.gemsRow}>
         <View style={styles.gemsBadge}>
-          <Text style={styles.gemsBadgeIcon}>💎</Text>
+          <Image source={Images.gemme} style={styles.gemsBadgeIcon} />
           <Text style={styles.gemsBadgeValue}>{totalGems}</Text>
           <Text style={styles.gemsBadgeLabel}>total</Text>
         </View>
         <View style={styles.gemsDivider} />
         <View style={styles.gemsBadge}>
-          <Text style={styles.gemsBadgeIcon}>🏆</Text>
+          <Image source={Images.cup} style={styles.gemsBadgeIcon} />
           <Text style={styles.gemsBadgeValue}>{gemsAujourdhui}/{MAX_GEMS_PAR_JOUR}</Text>
           <Text style={styles.gemsBadgeLabel}>aujourd'hui</Text>
         </View>
@@ -294,7 +269,10 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
       {!gemsPlafond && !loading && (
         <View style={styles.nextGemCard}>
           <View style={styles.nextGemHeader}>
-            <Text style={styles.nextGemLabel}>Prochain 💎 dans</Text>
+            <View style={styles.nextGemLabelRow}>
+              <Text style={styles.nextGemLabel}>Prochain </Text>
+              <Image source={Images.gemme} style={styles.nextGemIcon} />
+            </View>
             <Text style={styles.nextGemCount}>{prochainGemDans} pas</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -304,7 +282,10 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
       )}
       {gemsPlafond && (
         <View style={styles.plafondCard}>
-          <Text style={styles.plafondText}>🏆 Plafond journalier atteint ({MAX_GEMS_PAR_JOUR} gems) !</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Image source={Images.cup} style={{ width: 18, height: 18, resizeMode: "contain" }} />
+            <Text style={styles.plafondText}>Plafond journalier atteint ({MAX_GEMS_PAR_JOUR} gems) !</Text>
+          </View>
         </View>
       )}
 
@@ -378,9 +359,10 @@ export default function StepsScreen({ profile, onRefreshProfile }) {
                   {seuil >= 1000 ? `${seuil / 1000} 000` : seuil}
                 </Text>
                 <Text style={styles.baremeArrow}>{atteint ? "✓" : "→"}</Text>
-                <Text style={[styles.baremeGems, atteint && styles.baremeTextActive]}>
-                  {gems} 💎
-                </Text>
+                <View style={styles.baremeGemsRow}>
+                  <Text style={[styles.baremeGems, atteint && styles.baremeTextActive]}>{gems} </Text>
+                  <Image source={Images.gemme} style={styles.baremeGemIcon} />
+                </View>
               </View>
             );
           })}
@@ -415,7 +397,7 @@ const styles = StyleSheet.create({
     ...shadow.sm,
   },
   gemsBadge:      { flex: 1, alignItems: "center" },
-  gemsBadgeIcon:  { fontSize: fontSize.xl4, marginBottom: 2 },
+  gemsBadgeIcon:  { width: 36, height: 36, resizeMode: "contain", marginBottom: 2 },
   gemsBadgeValue: { fontSize: fontSize.xl4, fontWeight: "800", color: colors.textPrimary },
   gemsBadgeLabel: { fontSize: fontSize.xs, color: colors.textPlaceholder, marginTop: 2 },
   gemsDivider:    { width: 1, height: 40, backgroundColor: colors.borderLight },
@@ -525,5 +507,9 @@ const styles = StyleSheet.create({
   baremeSteps:       { fontSize: fontSize.md, color: colors.textMuted, fontWeight: "500", flex: 1 },
   baremeArrow:       { fontSize: fontSize.md, color: colors.borderMedium, marginHorizontal: spacing.sm },
   baremeGems:        { fontSize: fontSize.md, color: colors.textMuted, fontWeight: "600" },
+  baremeGemsRow:     { flexDirection: "row", alignItems: "center" },
+  baremeGemIcon:     { width: 14, height: 14, resizeMode: "contain" },
   baremeTextActive:  { color: colors.success, fontWeight: "700" },
+  nextGemLabelRow:   { flexDirection: "row", alignItems: "center" },
+  nextGemIcon:       { width: 14, height: 14, resizeMode: "contain", marginHorizontal: 2 },
 });

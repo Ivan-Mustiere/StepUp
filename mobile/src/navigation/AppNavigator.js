@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -20,6 +22,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import { formatDate, statutLabel, statutColor } from "../utils/helpers";
 import { colors, fontSize, spacing, radius, shadow } from "../styles";
+import { Images } from "../assets/images";
 import { getRank, getNextRank, getRankProgress } from "../config/ranks";
 import {
   updateProfile,
@@ -35,6 +38,7 @@ import {
   searchByFriendCode,
   getParis,
   placeBet,
+  reglerPari,
   getCommunautes,
   joinCommunaute,
   leaveCommunaute,
@@ -68,11 +72,11 @@ const REGIONS_BY_PAYS = {
 };
 
 const TABS = [
-  { id: "paris",       label: "Paris" },
-  { id: "pas",         label: "Pas" },
-  { id: "communautes", label: "Commu" },
-  { id: "amis",        label: "Amis" },
-  { id: "boutique",    label: "Boutique" },
+  { id: "paris",       label: "Paris",    icon: "trophy",          iconActive: "trophy" },
+  { id: "pas",         label: "Pas",      icon: "footsteps-outline", iconActive: "footsteps" },
+  { id: "communautes", label: "Commu",    icon: "people-outline",  iconActive: "people" },
+  { id: "amis",        label: "Amis",     icon: "person-add-outline", iconActive: "person-add" },
+  { id: "boutique",    label: "Boutique", icon: "bag-outline",     iconActive: "bag" },
 ];
 
 const TAB_NAMES = {
@@ -90,6 +94,47 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
   const [currentProfile, setCurrentProfile] = useState(profile);
   const [alertesCount, setAlertesCount] = useState(0);
   const [alertesVisible, setAlertesVisible] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const isFirstRender = useRef(true);
+  const tabSliderX = useRef(new Animated.Value(0)).current;
+  const tabSliderW = useRef(new Animated.Value(0)).current;
+  const [tabLayouts, setTabLayouts] = useState({});
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    fadeAnim.setValue(0);
+    slideAnim.setValue(16);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start();
+  }, [tab]);
+
+  const switchTab = useCallback((newTab) => {
+    if (newTab === tab) return;
+    const layout = tabLayouts[newTab];
+    if (layout) {
+      Animated.spring(tabSliderX, { toValue: layout.x, useNativeDriver: false, speed: 20, bounciness: 4 }).start();
+      Animated.spring(tabSliderW, { toValue: layout.width, useNativeDriver: false, speed: 20, bounciness: 4 }).start();
+    }
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: -12, duration: 150, useNativeDriver: true }),
+    ]).start(() => setTab(newTab));
+  }, [tab, fadeAnim, slideAnim, tabLayouts, tabSliderX, tabSliderW]);
+
+  function onTabLayout(id, e) {
+    const { x, width } = e.nativeEvent.layout;
+    setTabLayouts((prev) => {
+      const next = { ...prev, [id]: { x, width } };
+      if (id === tab && tabSliderW.__getValue() === 0) {
+        tabSliderX.setValue(x);
+        tabSliderW.setValue(width);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     setCurrentProfile(profile);
@@ -116,7 +161,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
   function renderContent() {
     switch (tab) {
       case "paris":
-        return <ParisScreen key={tab} profile={currentProfile} onBetPlaced={handleRefresh} />;
+        return <ParisScreen profile={currentProfile} onBetPlaced={handleRefresh} />;
       case "pas":
         return <StepsScreen profile={currentProfile} onRefreshProfile={onRefreshProfile} />;
       case "communautes":
@@ -140,8 +185,14 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
       <View style={styles.header}>
         {/* Gauche : monnaies */}
         <View style={styles.headerLeft}>
-          <Text style={styles.headerStat}>💎 {currentProfile.gems ?? 0}</Text>
-          <Text style={styles.headerStat}>🪙 {currentProfile.coins}</Text>
+          <View style={styles.headerStatRow}>
+            <Image source={Images.gemme} style={styles.headerStatIcon} />
+            <Text style={styles.headerStat}>{currentProfile.gems ?? 0}</Text>
+          </View>
+          <View style={styles.headerStatRow}>
+            <Image source={Images.coin} style={styles.headerStatIcon} />
+            <Text style={styles.headerStat}>{currentProfile.coins}</Text>
+          </View>
         </View>
 
         {/* Centre : nom de la page */}
@@ -151,7 +202,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
         <View style={styles.headerRight}>
           {/* Cloche alertes */}
           <TouchableOpacity style={styles.headerIconBtn} onPress={() => setAlertesVisible(true)}>
-            <Text style={styles.headerIconEmoji}>🔔</Text>
+            <Ionicons name={alertesCount > 0 ? "notifications" : "notifications-outline"} size={24} color={alertesCount > 0 ? colors.primary : colors.textPlaceholder} />
             {alertesCount > 0 && (
               <View style={styles.headerBadge}>
                 <Text style={styles.headerBadgeText}>
@@ -162,7 +213,7 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
           </TouchableOpacity>
 
           {/* Avatar profil */}
-          <TouchableOpacity style={styles.headerAvatarBtn} onPress={() => setTab("profil")}>
+          <TouchableOpacity style={styles.headerAvatarBtn} onPress={() => switchTab("profil")}>
             {avatar ? (
               <Image source={avatar} style={styles.headerAvatar} />
             ) : (
@@ -176,7 +227,9 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
         </View>
       </View>
 
-      <View style={styles.content}>{renderContent()}</View>
+      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        {renderContent()}
+      </Animated.View>
 
       {/* Modal Alertes */}
       <Modal
@@ -204,14 +257,21 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
       </Modal>
 
       <View style={styles.tabBar}>
+        <Animated.View style={[styles.tabSlider, { left: tabSliderX, width: tabSliderW }]} />
         {TABS.map((t) => {
           const active = tab === t.id;
           return (
             <TouchableOpacity
               key={t.id}
-              style={[styles.tabBtn, active && styles.tabBtnActive]}
-              onPress={() => setTab(t.id)}
+              style={styles.tabBtn}
+              onLayout={(e) => onTabLayout(t.id, e)}
+              onPress={() => switchTab(t.id)}
             >
+              <Ionicons
+                name={active ? t.iconActive : t.icon}
+                size={22}
+                color={active ? colors.primary : colors.textPlaceholder}
+              />
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
                 {t.label}
               </Text>
@@ -227,26 +287,27 @@ export default function AppNavigator({ profile, onLogout, onRefreshProfile }) {
 const LIMIT = 20;
 
 const CATEGORIES_PARIS = [
-  { id: "League of Legends",  label: "LoL",      icon: null,  source: require("../assets/images/League_Of_Legende.png") },
-  { id: "Valorant",           label: "Valorant", icon: null,  source: require("../assets/images/Valorant.png") },
-  { id: "Rocket League",      label: "RL",       icon: null,  source: require("../assets/images/Rocket_League.png") },
+  { id: "League of Legends",  label: "LoL",      icon: null,  source: require("../assets/images/game/League_Of_Legende.png") },
+  { id: "Valorant",           label: "Valorant", icon: null,  source: require("../assets/images/game/Valorant.png") },
+  { id: "Rocket League",      label: "RL",       icon: null,  source: require("../assets/images/game/Rocket_League.png") },
 ];
 
+const JEU_LOGOS = {
+  "League of Legends": require("../assets/images/game/League_Of_Legende.png"),
+  "Valorant":          require("../assets/images/game/Valorant.png"),
+  "Rocket League":     require("../assets/images/game/Rocket_League.png"),
+};
+
 const TEAM_LOGOS = {
-  "T1":          require("../assets/images/Teams/T1.png"),
-  "Fnatic":      require("../assets/images/Teams/Fanatic.png"),
-  "Fanatic":     require("../assets/images/Teams/Fanatic.png"),
-  "G2":          require("../assets/images/Teams/G2.png"),
-  "G2 Esports":  require("../assets/images/Teams/G2.png"),
-  "Gen.G":       require("../assets/images/Teams/Gen_G.png"),
-  "NaVi":        require("../assets/images/Teams/Navi.png"),
-  "Natus Vincere": require("../assets/images/Teams/Navi.png"),
-  "Cloud9":      require("../assets/images/Teams/Cloud9.png"),
-  "C9":          require("../assets/images/Teams/Cloud9.png"),
-  "Team Liquid":  require("../assets/images/Teams/Team Liquid.png"),
-  "Liquid":      require("../assets/images/Teams/Team Liquid.png"),
-  "MAD Lions":   require("../assets/images/Teams/Mad_Lion.png"),
-  "MAD":         require("../assets/images/Teams/Mad_Lion.png"),
+  "T1":            require("../assets/images/Teams/T1.png"),
+  "Fnatic":        require("../assets/images/Teams/Fanatic.png"),
+  "G2 Esports":    require("../assets/images/Teams/G2.png"),
+  "Gen.G":         require("../assets/images/Teams/Gen_G.png"),
+  "NaVi":          require("../assets/images/Teams/Navi.png"),
+  "Cloud9":        require("../assets/images/Teams/Cloud9.png"),
+  "Team Liquid":   require("../assets/images/Teams/Team Liquid.png"),
+  "MAD Lions":     require("../assets/images/Teams/Mad_Lion.png"),
+  "Vitality":      require("../assets/images/Teams/Vitality.png"),
 };
 
 function parseTeams(titre) {
@@ -261,7 +322,7 @@ function parseTeams(titre) {
   return { team1: null, team2: null, tournoi };
 }
 
-function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustMise, onChangeMise, onConfirm, onCancel, isFavorite }) {
+function PariCard({ p, bettingId, betError, mise, maxCoins, equipeChoisie, onSetEquipe, onOpenBet, onAdjustMise, onChangeMise, onConfirm, onCancel, isFavorite, profile, onRegle }) {
   const now = Date.now();
   const debut = p.date_debut ? new Date(p.date_debut).getTime() : null;
   const parisFerme = debut && now >= debut - 15 * 60 * 1000;
@@ -338,22 +399,50 @@ function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustM
         )}
       </View>
 
-      {p.statut === "actif" && parisFerme && (
-        p.deja_parie ? (
-          <View style={styles.maMiseRow}>
-            <Text style={styles.maMiseText}>✅ Mise placée : <Text style={styles.maMiseValue}>{p.ma_mise} 🪙</Text></Text>
-            <Text style={styles.maMiseCote}>Cote : <Text style={styles.maMiseValue}>×{p.cote}</Text></Text>
+      {p.deja_parie && (
+        <View style={styles.maMiseRow}>
+          <View style={styles.maMiseInline}>
+            <Text style={styles.maMiseText}>✅ Mise placée : </Text>
+            <Text style={styles.maMiseValue}>{p.ma_mise}</Text>
+            <Image source={Images.coin} style={styles.inlineIcon} />
           </View>
-        ) : (
-          <View style={styles.parisFermeRow}>
-            <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
-          </View>
-        )
+          {p.mon_equipe && <Text style={styles.maMiseCote}>Équipe : <Text style={styles.maMiseValue}>{p.mon_equipe}</Text></Text>}
+          <Text style={styles.maMiseCote}>Cote : <Text style={styles.maMiseValue}>×{p.mon_equipe === team1 ? (p.cote_team1 ?? p.cote) : p.mon_equipe === team2 ? (p.cote_team2 ?? p.cote) : (p.cote ?? "?")}</Text></Text>
+        </View>
+      )}
+      {p.statut === "actif" && parisFerme && !p.deja_parie && (
+        <View style={styles.parisFermeRow}>
+          <Text style={styles.parisFermeText}>🔒 Paris fermés — moins de 15 min avant le début</Text>
+        </View>
       )}
       {p.statut === "actif" && !parisFerme && !p.deja_parie && (
         bettingId === p.id ? (
           <View style={styles.betForm}>
             {betError ? <Text style={styles.error}>{betError}</Text> : null}
+
+            {/* Choix équipe */}
+            {team1 && team2 && (
+              <View style={styles.betTeamRow}>
+                <TouchableOpacity
+                  style={[styles.betTeamBtn, equipeChoisie === team1 && styles.betTeamBtnActive]}
+                  onPress={() => onSetEquipe(team1)}
+                >
+                  {logo1 ? <Image source={logo1} style={styles.betTeamLogo} resizeMode="contain" /> : null}
+                  <Text style={[styles.betTeamName, equipeChoisie === team1 && styles.betTeamNameActive]} numberOfLines={1}>{team1}</Text>
+                  <Text style={[styles.betTeamCote, equipeChoisie === team1 && styles.betTeamCoteActive]}>×{p.cote_team1 ?? "?"}</Text>
+                </TouchableOpacity>
+                <Text style={styles.betTeamVs}>VS</Text>
+                <TouchableOpacity
+                  style={[styles.betTeamBtn, equipeChoisie === team2 && styles.betTeamBtnActive]}
+                  onPress={() => onSetEquipe(team2)}
+                >
+                  {logo2 ? <Image source={logo2} style={styles.betTeamLogo} resizeMode="contain" /> : null}
+                  <Text style={[styles.betTeamName, equipeChoisie === team2 && styles.betTeamNameActive]} numberOfLines={1}>{team2}</Text>
+                  <Text style={[styles.betTeamCote, equipeChoisie === team2 && styles.betTeamCoteActive]}>×{p.cote_team2 ?? "?"}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.betMiseZone}>
               <View style={styles.betAdjustRow}>
                 <TouchableOpacity style={styles.betAdjBtn} onPress={() => onAdjustMise(-100)}>
@@ -384,19 +473,43 @@ function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustM
                   <Text style={[styles.betAdjBtnText, styles.betAdjBtnTextPlus]}>+100</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.betMiseLabel}>🪙 coins</Text>
+              <View style={styles.betMiseLabelRow}>
+                <Image source={Images.coin} style={styles.inlineIcon} />
+                <Text style={styles.betMiseLabel}> coins</Text>
+                {equipeChoisie && (mise >= 10) && (
+                  <Text style={styles.betGainEstim}>
+                    {" "}→ gain estimé : {Math.round(Number(mise) * (equipeChoisie === team1 ? (p.cote_team1 ?? 1) : (p.cote_team2 ?? 1)))}
+                  </Text>
+                )}
+              </View>
             </View>
             <View style={styles.actions}>
-              <Button onPress={() => onConfirm(p.id)}>Confirmer</Button>
+              <Button onPress={() => onConfirm(p.id)} disabled={!!(team1 && team2 && !equipeChoisie)}>Confirmer</Button>
               <Button variant="secondary" onPress={onCancel}>Annuler</Button>
             </View>
           </View>
         ) : (
           <View style={styles.betButtonRow}>
             <Button onPress={() => onOpenBet(p.id)}>Parier</Button>
-            <Text style={styles.betGemHint}>💎 1 gem</Text>
+            <View style={styles.betGemHintRow}>
+              <Image source={Images.gemme} style={styles.inlineIcon} />
+              <Text style={styles.betGemHint}> 1 gem</Text>
+            </View>
           </View>
         )
+      )}
+
+      {/* Bouton admin — régler le pari */}
+      {profile?.is_admin && p.statut === "actif" && team1 && team2 && (
+        <View style={styles.adminReglerRow}>
+          <Text style={styles.adminReglerLabel}>Régler :</Text>
+          <TouchableOpacity style={styles.adminReglerBtn} onPress={() => onRegle?.(p.id, team1)}>
+            <Text style={styles.adminReglerBtnText}>{team1}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.adminReglerBtn} onPress={() => onRegle?.(p.id, team2)}>
+            <Text style={styles.adminReglerBtnText}>{team2}</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </Card>
   );
@@ -405,11 +518,37 @@ function PariCard({ p, bettingId, betError, mise, maxCoins, onOpenBet, onAdjustM
 function ParisScreen({ profile, onBetPlaced }) {
   const [paris, setParis] = useState([]);
   const [categorie, setCategorie] = useState("League of Legends");
+  const catSliderX = useRef(new Animated.Value(0)).current;
+  const catSliderW = useRef(new Animated.Value(0)).current;
+  const [catLayouts, setCatLayouts] = useState({});
+
+  function onCatLayout(id, e) {
+    const { x, width } = e.nativeEvent.layout;
+    setCatLayouts((prev) => {
+      const next = { ...prev, [id]: { x, width } };
+      if (id === categorie && catSliderW.__getValue() === 0) {
+        catSliderX.setValue(x);
+        catSliderW.setValue(width);
+      }
+      return next;
+    });
+  }
+
+  function switchCategorie(id) {
+    if (id === categorie) return;
+    const layout = catLayouts[id];
+    if (layout) {
+      Animated.spring(catSliderX, { toValue: layout.x, useNativeDriver: false, speed: 20, bounciness: 4 }).start();
+      Animated.spring(catSliderW, { toValue: layout.width, useNativeDriver: false, speed: 20, bounciness: 4 }).start();
+    }
+    setCategorie(id);
+  }
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
   const [bettingId, setBettingId] = useState(null);
+  const [equipeChoisie, setEquipeChoisie] = useState(null);
   const [mise, setMise] = useState("");
   const [betError, setBetError] = useState("");
   const [betSuccess, setBetSuccess] = useState(null);
@@ -467,10 +606,11 @@ function ParisScreen({ profile, onBetPlaced }) {
     setBetError("");
     setBetSuccess(null);
     try {
-      const result = await placeBet(pariId, Number(mise));
+      const result = await placeBet(pariId, Number(mise), equipeChoisie);
       setBetSuccess(result);
       setMise("");
       setBettingId(null);
+      setEquipeChoisie(null);
       onBetPlaced();
       load(true);
     } catch (err) {
@@ -480,6 +620,7 @@ function ParisScreen({ profile, onBetPlaced }) {
 
   function openBet(pariId) {
     setBettingId(pariId);
+    setEquipeChoisie(null);
     const coins = profile?.coins ?? 0;
     setMise(String(Math.min(coins, 150)));
     setBetError("");
@@ -494,14 +635,40 @@ function ParisScreen({ profile, onBetPlaced }) {
     setMise(String(next));
   }
 
+  async function handleRegle(pariId, equipeGagnante) {
+    Alert.alert(
+      "Régler le pari",
+      `Confirmer la victoire de "${equipeGagnante}" ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Confirmer",
+          onPress: async () => {
+            try {
+              const res = await reglerPari(pariId, equipeGagnante);
+              Alert.alert("Réglé", `${res.gagnants} gagnant(s) — ${res.total_redistribue} coins redistribués.`);
+              load(true);
+              onBetPlaced();
+            } catch (err) {
+              Alert.alert("Erreur", err.message);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   const cardProps = {
     bettingId, betError, mise, maxCoins,
+    equipeChoisie, onSetEquipe: setEquipeChoisie,
     onOpenBet: openBet,
     onAdjustMise: adjustMise,
     onChangeMise: setMise,
     onConfirm: handleBet,
-    onCancel: () => setBettingId(null),
+    onCancel: () => { setBettingId(null); setEquipeChoisie(null); },
     isFavoriteMatch,
+    profile,
+    onRegle: handleRegle,
   };
 
   return (
@@ -514,11 +681,13 @@ function ParisScreen({ profile, onBetPlaced }) {
 
       {/* Nav : catégorie / jeu */}
       <View style={styles.catBar}>
+        <Animated.View style={[styles.catSlider, { left: catSliderX, width: catSliderW }]} />
         {CATEGORIES_PARIS.map((c) => (
           <TouchableOpacity
             key={c.id}
-            style={[styles.catBtn, categorie === c.id && styles.catBtnActive]}
-            onPress={() => setCategorie(c.id)}
+            style={styles.catBtn}
+            onLayout={(e) => onCatLayout(c.id, e)}
+            onPress={() => switchCategorie(c.id)}
           >
             {c.source
               ? <Image source={c.source} style={styles.catBtnImage} resizeMode="contain" />
@@ -556,7 +725,10 @@ function ParisScreen({ profile, onBetPlaced }) {
           <>
             {mesParis.length > 0 && (
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>⚡ Paris disponibles</Text>
+                <View style={styles.sectionTitleRow}>
+                  <Image source={Images.xp} style={styles.sectionTitleIcon} />
+                  <Text style={styles.sectionTitle}> Paris disponibles</Text>
+                </View>
               </View>
             )}
             {autresParis.map((p) => <PariCard key={p.id} p={p} {...cardProps} isFavorite={isFavoriteMatch(p)} />)}
@@ -651,26 +823,33 @@ function CommunautesScreen({ profile }) {
             <Text style={styles.jeuLabel}>{jeu}</Text>
             {liste.map((c) => (
               <Card key={c.id}>
-                <View style={styles.communauteHeader}>
-                  <Text style={styles.communauteNom}>{c.nom}</Text>
-                  <Text style={styles.communauteMembres}>
-                    {c.nb_membres} membre{c.nb_membres !== 1 ? "s" : ""}
-                  </Text>
-                </View>
-                {c.description ? <Text style={styles.communauteDesc}>{c.description}</Text> : null}
-                <View style={styles.actions}>
-                  {c.est_membre ? (
-                    <>
-                      <Button onPress={() => setOpenChat(c)}>💬 Chat</Button>
-                      <Button variant="secondary" onPress={() => setClassementModal(c)}>🏆 Classement</Button>
-                      <Button variant="secondary" onPress={() => handleLeave(c.id)}>Quitter</Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button onPress={() => handleJoin(c.id)}>Rejoindre</Button>
-                      <Button variant="secondary" onPress={() => setClassementModal(c)}>🏆 Classement</Button>
-                    </>
-                  )}
+                <View style={styles.communauteRow}>
+                  {JEU_LOGOS[c.nom] || JEU_LOGOS[c.jeu] ? (
+                    <Image source={JEU_LOGOS[c.nom] || JEU_LOGOS[c.jeu]} style={styles.communauteLogo} resizeMode="contain" />
+                  ) : null}
+                  <View style={styles.communauteInfo}>
+                    <View style={styles.communauteHeader}>
+                      <Text style={styles.communauteNom}>{c.nom}</Text>
+                      <Text style={styles.communauteMembres}>
+                        {c.nb_membres} membre{c.nb_membres !== 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                    {c.description ? <Text style={styles.communauteDesc}>{c.description}</Text> : null}
+                    <View style={styles.actions}>
+                      {c.est_membre ? (
+                        <>
+                          <Button onPress={() => setOpenChat(c)}>💬 Chat</Button>
+                          <Button variant="secondary" onPress={() => setClassementModal(c)}>🏆 Classement</Button>
+                          <Button variant="secondary" onPress={() => handleLeave(c.id)}>Quitter</Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button onPress={() => handleJoin(c.id)}>Rejoindre</Button>
+                          <Button variant="secondary" onPress={() => setClassementModal(c)}>🏆 Classement</Button>
+                        </>
+                      )}
+                    </View>
+                  </View>
                 </View>
               </Card>
             ))}
@@ -732,7 +911,10 @@ function ClassementModal({ communaute, profile, onClose }) {
             </Text>
             <Text style={styles.classementXp}>{u.xp_total} XP</Text>
           </View>
-          <Text style={styles.classementCoins}>🪙 {u.coins}</Text>
+          <View style={styles.classementCoinsRow}>
+            <Image source={Images.coin} style={styles.inlineIcon} />
+            <Text style={styles.classementCoins}> {u.coins}</Text>
+          </View>
         </View>
       </Card>
     );
@@ -951,87 +1133,101 @@ function ProfileModal({ user, currentUser, onClose, onFriendRemoved }) {
     <>
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-
-          {!isSelf && (
-            <TouchableOpacity
-              style={styles.modalAddFriendBtn}
-              onPress={fullUser.is_friend ? () => setConfirmVisible(true) : handleAskFriend}
-              disabled={requestState === "loading"}
-            >
-              <Text style={styles.modalAddFriendIcon}>
-                {fullUser.is_friend
-                  ? "🗑️"
-                  : requestState === "sent" ? "✓"
-                  : requestState === "loading" ? "…"
-                  : "🫂"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
+        <View style={styles.profilModalCard} onStartShouldSetResponder={() => true}>
 
           {(() => {
             const rank = getRank(fullUser.xp_total ?? 0);
             return (
-              <View style={[styles.profilInfo, { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 8 }]}>
-                {/* Bannière rang — image elo en arrière-plan */}
-                <View style={styles.profilBanner}>
-                  <Image source={rank.image} style={styles.profilBannerImg} resizeMode="contain" />
+              <>
+                {/* Bannière — pleine largeur, colle aux bords et coins arrondis du haut */}
+                <View style={styles.profilBannerSm}>
+                  <Image source={rank.banner} style={styles.profilBannerImg} resizeMode="cover" />
                 </View>
-                {/* Avatar */}
-                {fullUser.avatar ? (
-                  <Image
-                    source={{ uri: API_BASE_URL + fullUser.avatar }}
-                    style={[styles.profilAvatarImg, { borderColor: rank.color }]}
-                  />
-                ) : (
-                  <View style={[styles.profilAvatar, { backgroundColor: rank.color }]}>
-                    <Text style={styles.profilAvatarText}>{fullUser.pseudo?.[0]?.toUpperCase()}</Text>
-                  </View>
+
+                {/* Bouton ami — par-dessus la bannière */}
+                {!isSelf && (
+                  <TouchableOpacity
+                    style={styles.modalAddFriendBtn}
+                    onPress={fullUser.is_friend ? () => setConfirmVisible(true) : handleAskFriend}
+                    disabled={requestState === "loading"}
+                  >
+                    <Ionicons
+                      name={
+                        fullUser.is_friend ? "person-remove"
+                        : requestState === "sent" ? "checkmark"
+                        : requestState === "loading" ? "ellipsis-horizontal"
+                        : "person-add"
+                      }
+                      size={22}
+                      color={fullUser.is_friend ? colors.error : requestState === "sent" ? colors.success : colors.primary}
+                    />
+                  </TouchableOpacity>
                 )}
-                <Text style={styles.profilPseudo}>{fullUser.pseudo}</Text>
-                <View style={styles.rankBadge}>
-                  <Image source={rank.image} style={styles.rankBadgeIcon} resizeMode="contain" />
-                  <Text style={[styles.rankBadgeName, { color: rank.color }]}>{rank.name}</Text>
+
+                {/* Zone bannière + avatar qui chevauche */}
+                <View style={{ height: 55 }}>
+                  <View style={{ position: "absolute", left: 0, right: 0, alignItems: "center", top: -55 }}>
+                    {fullUser.avatar ? (
+                      <Image
+                        source={{ uri: API_BASE_URL + fullUser.avatar }}
+                        style={[styles.profilAvatarImg, { borderColor: rank.color }]}
+                      />
+                    ) : (
+                      <View style={[styles.profilAvatar, { backgroundColor: rank.color }]}>
+                        <Text style={styles.profilAvatarText}>{fullUser.pseudo?.[0]?.toUpperCase()}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                {requestState === "error" && <Text style={styles.error}>{errorMsg}</Text>}
-              </View>
+
+                {/* Contenu paddé */}
+                <View style={styles.profilModalContent}>
+                  <View style={[styles.profilInfo, { borderBottomWidth: 0, marginBottom: 0, paddingBottom: 8 }]}>
+                    <Text style={[styles.profilPseudo, { marginTop: 0 }]}>{fullUser.pseudo}</Text>
+                    <View style={styles.rankBadge}>
+                      <Image source={rank.image} style={styles.rankBadgeIcon} resizeMode="contain" />
+                      <Text style={[styles.rankBadgeName, { color: rank.color }]}>{rank.name}</Text>
+                    </View>
+                    {requestState === "error" && <Text style={styles.error}>{errorMsg}</Text>}
+                  </View>
+
+                  {fullUser.communautes?.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={styles.label}>Communautés</Text>
+                      <View style={styles.commuTags}>
+                        {fullUser.communautes.map((c) => (
+                          <View key={c} style={styles.commuTag}>
+                            <Text style={styles.commuTagText}>{c}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {fullUser.equipes?.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={styles.label}>Équipes favorites</Text>
+                      <View style={styles.profilEquipesRow}>
+                        {fullUser.equipes.map((e) => {
+                          const logo = TEAM_LOGOS[e.nom];
+                          return (
+                            <View key={e.id} style={styles.profilEquipeItem}>
+                              {logo ? (
+                                <Image source={logo} style={styles.profilEquipeLogo} resizeMode="contain" />
+                              ) : (
+                                <View style={[styles.profilEquipeColorDot, { backgroundColor: e.couleur }]} />
+                              )}
+                              <Text style={[styles.profilEquipeNom, { color: e.couleur }]}>{e.nom}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </>
             );
           })()}
-
-          {fullUser.communautes?.length > 0 && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.label}>Communautés</Text>
-              <View style={styles.commuTags}>
-                {fullUser.communautes.map((c) => (
-                  <View key={c} style={styles.commuTag}>
-                    <Text style={styles.commuTagText}>{c}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {fullUser.equipes?.length > 0 && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.label}>Équipes favorites</Text>
-              <View style={styles.profilEquipesRow}>
-                {fullUser.equipes.map((e) => {
-                  const logo = TEAM_LOGOS[e.nom];
-                  return (
-                    <View key={e.id} style={styles.profilEquipeItem}>
-                      {logo ? (
-                        <Image source={logo} style={styles.profilEquipeLogo} resizeMode="contain" />
-                      ) : (
-                        <View style={[styles.profilEquipeColorDot, { backgroundColor: e.couleur }]} />
-                      )}
-                      <Text style={[styles.profilEquipeNom, { color: e.couleur }]}>{e.nom}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -1335,12 +1531,12 @@ function PrivateChatScreen({ friend, currentUser, onBack }) {
 }
 
 // --- Boutique ---
-const ARTICLES = [
+const ARTICLES_INGAME = [
   {
     id: "gems_to_coins",
     section: "Échange",
     nom: "Échange Gems → Coins",
-    description: "Convertissez 1 💎 en 50 🪙",
+    description: "Convertissez 1 gemme en 50 coins",
     prix: 1,
     devise: "gems",
     emoji: "💱",
@@ -1376,7 +1572,7 @@ const ARTICLES = [
     id: "pack_100",
     section: "Packs Coins",
     nom: "Pack Starter",
-    description: "100 🪙 directement sur votre compte",
+    description: "100 coins directement sur votre compte",
     prix: 2,
     devise: "gems",
     emoji: "💰",
@@ -1385,15 +1581,105 @@ const ARTICLES = [
     id: "pack_500",
     section: "Packs Coins",
     nom: "Pack Premium",
-    description: "500 🪙 + bonus 50 🪙 offerts",
+    description: "500 coins + bonus 50 coins offerts",
     prix: 8,
     devise: "gems",
-    emoji: "💎",
+    emoji: "🎁",
   },
 ];
 
+const ARTICLES_GOODIES = [
+  {
+    id: "tshirt",
+    section: "Vêtements",
+    nom: "T-shirt StepUp",
+    description: "T-shirt exclusif brodé logo StepUp",
+    prix: 500,
+    devise: "coins",
+    emoji: "👕",
+  },
+  {
+    id: "hoodie",
+    section: "Vêtements",
+    nom: "Hoodie StepUp",
+    description: "Hoodie premium édition limitée",
+    prix: 1200,
+    devise: "coins",
+    emoji: "🧥",
+  },
+  {
+    id: "casquette",
+    section: "Vêtements",
+    nom: "Casquette StepUp",
+    description: "Casquette snapback brodée",
+    prix: 300,
+    devise: "coins",
+    emoji: "🧢",
+  },
+  {
+    id: "vip_1mois",
+    section: "Avantages",
+    nom: "VIP 1 mois",
+    description: "Accès VIP : badge exclusif + bonus coins quotidiens",
+    prix: 200,
+    devise: "coins",
+    emoji: "⭐",
+  },
+  {
+    id: "discount_10",
+    section: "Avantages",
+    nom: "Réduction Paris -10%",
+    description: "10% de réduction sur vos mises pendant 7 jours",
+    prix: 150,
+    devise: "coins",
+    emoji: "🏷️",
+  },
+  {
+    id: "frame_gold",
+    section: "Avantages",
+    nom: "Cadre Profil Doré",
+    description: "Bordure dorée exclusive sur votre avatar",
+    prix: 250,
+    devise: "coins",
+    emoji: "🖼️",
+  },
+];
+
+const BOUTIQUE_TABS = [
+  { id: "goodies", label: "Goodies & Avantages", icon: "gift" },
+  { id: "ingame",  label: "Ingame",            icon: "game-controller" },
+];
+
 function BoutiqueScreen({ profile }) {
-  const sections = [...new Set(ARTICLES.map((a) => a.section))];
+  const [boutiqueTab, setBoutiqueTab] = useState("goodies");
+  const [tabWidths, setTabWidths] = useState({});
+  const [tabOffsets, setTabOffsets] = useState({});
+  const sliderX = useRef(new Animated.Value(0)).current;
+  const sliderW = useRef(new Animated.Value(0)).current;
+
+  function handleTabPress(id) {
+    if (id === boutiqueTab) return;
+    const toX = tabOffsets[id] ?? 0;
+    const toW = tabWidths[id] ?? 0;
+    Animated.parallel([
+      Animated.spring(sliderX, { toValue: toX, useNativeDriver: false, speed: 20, bounciness: 4 }),
+      Animated.spring(sliderW, { toValue: toW, useNativeDriver: false, speed: 20, bounciness: 4 }),
+    ]).start();
+    setBoutiqueTab(id);
+  }
+
+  function onTabLayout(id, e) {
+    const { x, width } = e.nativeEvent.layout;
+    setTabOffsets((prev) => ({ ...prev, [id]: x }));
+    setTabWidths((prev) => ({ ...prev, [id]: width }));
+    if (id === boutiqueTab) {
+      sliderX.setValue(x);
+      sliderW.setValue(width);
+    }
+  }
+
+  const articles = boutiqueTab === "ingame" ? ARTICLES_INGAME : ARTICLES_GOODIES;
+  const sections = [...new Set(articles.map((a) => a.section))];
 
   function handleAcheter(article) {
     Alert.alert(
@@ -1405,17 +1691,32 @@ function BoutiqueScreen({ profile }) {
 
   return (
     <View style={styles.screen}>
-
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.boutiqueHero}>
-          <Text style={styles.boutiqueHeroText}>🛒 Dépensez vos Gems</Text>
-          <Text style={styles.boutiqueHeroSub}>Marchez pour gagner des 💎 et débloquez des avantages</Text>
+        <View style={styles.boutiqueTabsWrapper}>
+          <Animated.View style={[styles.boutiqueSlider, { left: sliderX, width: sliderW }]} />
+          {BOUTIQUE_TABS.map((t) => (
+            <TouchableOpacity
+              key={t.id}
+              style={styles.boutiqueTabBtn}
+              onLayout={(e) => onTabLayout(t.id, e)}
+              onPress={() => handleTabPress(t.id)}
+            >
+              <Ionicons
+                name={t.icon}
+                size={16}
+                color={boutiqueTab === t.id ? colors.white : colors.textPlaceholder}
+              />
+              <Text style={[styles.boutiqueTabLabel, boutiqueTab === t.id && styles.boutiqueTabLabelActive]}>
+                {t.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {sections.map((section) => (
           <View key={section} style={styles.section}>
             <Text style={styles.sectionTitle}>{section}</Text>
-            {ARTICLES.filter((a) => a.section === section).map((article) => (
+            {articles.filter((a) => a.section === section).map((article) => (
               <Card key={article.id} style={styles.articleCard}>
                 <View style={styles.articleRow}>
                   <Text style={styles.articleEmoji}>{article.emoji}</Text>
@@ -1427,9 +1728,13 @@ function BoutiqueScreen({ profile }) {
                     style={styles.acheterBtn}
                     onPress={() => handleAcheter(article)}
                   >
-                    <Text style={styles.acheterBtnPrix}>
-                      {article.prix} {article.devise === "gems" ? "💎" : "🪙"}
-                    </Text>
+                    <View style={styles.acheterBtnPrixRow}>
+                      <Text style={styles.acheterBtnPrix}>{article.prix} </Text>
+                      <Image
+                        source={article.devise === "gems" ? Images.gemme : Images.coin}
+                        style={styles.inlineIcon}
+                      />
+                    </View>
                     <Text style={styles.acheterBtnLabel}>Acheter</Text>
                   </TouchableOpacity>
                 </View>
@@ -1672,7 +1977,7 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
         {/* Carte identité */}
         <Card style={{ position: "relative" }}>
           <TouchableOpacity style={styles.profilSettingsBtn} onPress={() => { setSection(null); setError(""); setSuccess(""); setSettingsVisible(true); }}>
-            <Text style={styles.profilSettingsIcon}>⚙️</Text>
+            <Ionicons name="settings-outline" size={22} color={colors.textPlaceholder} />
           </TouchableOpacity>
 
           {(() => {
@@ -1681,7 +1986,7 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
               <View style={styles.profilInfo}>
                 {/* Bannière rang — image elo en arrière-plan */}
                 <View style={styles.profilBanner}>
-                  <Image source={rank.image} style={styles.profilBannerImg} resizeMode="contain" />
+                  <Image source={rank.banner} style={styles.profilBannerImg} resizeMode="cover" />
                 </View>
                 {/* Avatar par dessus la bannière */}
                 <TouchableOpacity style={styles.profilAvatarWrapper} onPress={handlePickAvatar} disabled={avatarUploading}>
@@ -1703,7 +2008,6 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
                   </View>
                 </TouchableOpacity>
                 <Text style={styles.profilPseudo}>{profile.pseudo}</Text>
-                <Text style={styles.profilEmail}>{profile.email}</Text>
                 {profile.friend_code && (
                   <TouchableOpacity
                     onPress={() => {
@@ -1722,12 +2026,12 @@ function ProfilScreen({ profile, onLogout, onRefreshProfile }) {
 
           <View style={styles.profilStats}>
             <View style={styles.stat}>
+              <Image source={Images.coin} style={styles.statIcon} />
               <Text style={styles.statValue}>{profile.coins}</Text>
-              <Text style={styles.statLabel}>Coins</Text>
             </View>
             <View style={styles.stat}>
+              <Image source={Images.xp} style={styles.statIcon} />
               <Text style={styles.statValue}>{profile.xp_total}</Text>
-              <Text style={styles.statLabel}>XP total</Text>
             </View>
           </View>
 
@@ -2003,10 +2307,69 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xl,
     fontWeight: "700",
   },
+  headerStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  headerStatIcon: {
+    width: 18,
+    height: 18,
+    resizeMode: "contain",
+  },
   headerStat: {
     fontSize: fontSize.md,
     fontWeight: "600",
     color: colors.textMuted,
+  },
+  inlineIcon: {
+    width: 14,
+    height: 14,
+    resizeMode: "contain",
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sectionTitleIcon: {
+    width: 18,
+    height: 18,
+    resizeMode: "contain",
+    marginRight: 4,
+  },
+  maMiseInline: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  betMiseLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  betGemHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  classementCoinsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  boutiqueHeroSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  acheterBtnPrixRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statIcon: {
+    width: 28,
+    height: 28,
+    resizeMode: "contain",
+    marginBottom: 4,
   },
   content: {
     flex: 1,
@@ -2017,15 +2380,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     paddingBottom: Platform.OS === "ios" ? 4 : 0,
+    position: "relative",
+  },
+  tabSlider: {
+    position: "absolute",
+    top: 0,
+    height: 2,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     alignItems: "center",
-  },
-  tabBtnActive: {
-    borderTopWidth: 2,
-    borderTopColor: colors.primary,
+    gap: 3,
+    zIndex: 1,
   },
   tabLabel: {
     fontSize: 10,
@@ -2039,6 +2408,7 @@ const styles = StyleSheet.create({
   // Shared screen styles
   screen: {
     flex: 1,
+    backgroundColor: colors.bgWhite,
   },
   screenHeader: {
     flexDirection: "row",
@@ -2123,6 +2493,15 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderLight,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
+    position: "relative",
+  },
+  catSlider: {
+    position: "absolute",
+    top: spacing.sm,
+    bottom: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+    opacity: 0.18,
   },
   catBarContent: {},
   catBtn: {
@@ -2130,13 +2509,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 6,
     borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.transparent,
-    backgroundColor: colors.transparent,
-  },
-  catBtnActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
+    zIndex: 1,
   },
   catBtnIcon: {
     fontSize: fontSize.xl4,
@@ -2332,6 +2705,86 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
+  betTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+  },
+  betTeamBtn: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.borderMedium,
+    backgroundColor: colors.bgLight,
+    gap: 4,
+  },
+  betTeamBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: "rgba(255,51,0,0.12)",
+  },
+  betTeamLogo: {
+    width: 32,
+    height: 32,
+  },
+  betTeamName: {
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+  betTeamNameActive: {
+    color: colors.primary,
+  },
+  betTeamCote: {
+    fontSize: fontSize.lg,
+    fontWeight: "800",
+    color: colors.textSubtle,
+  },
+  betTeamCoteActive: {
+    color: colors.primary,
+  },
+  betTeamVs: {
+    fontSize: fontSize.sm,
+    fontWeight: "700",
+    color: colors.textPlaceholder,
+  },
+  betGainEstim: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    fontWeight: "600",
+  },
+  adminReglerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  adminReglerLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textPlaceholder,
+    fontWeight: "600",
+  },
+  adminReglerBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: "rgba(255,51,0,0.15)",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: "center",
+  },
+  adminReglerBtnText: {
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    color: colors.primary,
+  },
   betCostText: {
     fontSize: fontSize.sm,
     color: "#92400e",
@@ -2405,24 +2858,25 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.successBg,
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.successBorder,
+    borderColor: "rgba(255,255,255,0.10)",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   maMiseText: {
-    fontSize: fontSize.md,
-    color: "#15803d",
+    fontSize: fontSize.sm,
+    color: "#94a3b8",
   },
   maMiseCote: {
-    fontSize: fontSize.md,
-    color: "#15803d",
+    fontSize: fontSize.sm,
+    color: "#94a3b8",
   },
   maMiseValue: {
     fontWeight: "700",
+    color: "#ffffff",
   },
   sectionHeader: {
     marginTop: spacing.xl,
@@ -2432,7 +2886,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fontSize.lg,
     fontWeight: "700",
-    color: "#1e293b",
+    color: colors.textPrimary,
   },
   enDirectBadge: {
     flexDirection: "row",
@@ -2483,6 +2937,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   // Communautés
+  communauteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  communauteLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+  },
+  communauteInfo: {
+    flex: 1,
+  },
   communauteHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -2518,12 +2985,12 @@ const styles = StyleSheet.create({
   },
   // Classement
   classementMe: {
-    backgroundColor: colors.primaryLight,
-    borderColor: "#bfdbfe",
+    backgroundColor: "rgba(255,51,0,0.12)",
+    borderColor: "rgba(255,51,0,0.4)",
   },
   classementTopMe: {
-    backgroundColor: "#fefce8",
-    borderColor: "#fde68a",
+    backgroundColor: "rgba(255,215,0,0.18)",
+    borderColor: "rgba(255,215,0,0.55)",
   },
   classementSectionLabel: {
     fontSize: fontSize.xs,
@@ -2674,6 +3141,13 @@ const styles = StyleSheet.create({
     width: "90%",
     maxWidth: 400,
     maxHeight: "75%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
   },
   classementModalHeader: {
     flexDirection: "row",
@@ -2694,6 +3168,13 @@ const styles = StyleSheet.create({
     padding: 20,
     width: "85%",
     maxWidth: 360,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
   },
   modalAddFriendBtn: {
     position: "absolute",
@@ -2713,40 +3194,64 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.bgSubtle,
     overflow: "hidden",
   },
+  profilModalCard: {
+    backgroundColor: colors.bgWhite,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    width: "85%",
+    maxWidth: 360,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  profilModalContent: {
+    padding: 20,
+  },
+  profilBannerSm: {
+    width: "100%",
+    height: 90,
+    opacity: 0.8,
+  },
   profilBanner: {
     width: "100%",
-    height: 120,
+    height: 180,
     marginBottom: -44,
-    opacity: 0.3,
+    opacity: 0.8,
+    overflow: "hidden",
   },
   profilBannerImg: {
     width: "100%",
     height: "100%",
+    resizeMode: "cover",
   },
   profilAvatarWrapper: {
-    width: 88,
-    height: 88,
+    width: 110,
+    height: 110,
     marginBottom: 10,
     position: "relative",
   },
   profilAvatarImg: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     borderWidth: 3,
     borderColor: colors.borderLight,
   },
   profilAvatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   profilAvatarText: {
     color: colors.white,
-    fontSize: 34,
+    fontSize: 42,
     fontWeight: "700",
   },
   profilAvatarEditBadge: {
@@ -3085,6 +3590,40 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   // Boutique
+  boutiqueTabsWrapper: {
+    flexDirection: "row",
+    backgroundColor: colors.bgLight,
+    borderRadius: radius.md,
+    padding: 4,
+    marginBottom: spacing.xl,
+    position: "relative",
+  },
+  boutiqueSlider: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
+  },
+  boutiqueTabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    zIndex: 1,
+  },
+  boutiqueTabLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+    color: colors.textPlaceholder,
+  },
+  boutiqueTabLabelActive: {
+    color: colors.white,
+  },
   boutiqueHero: {
     backgroundColor: colors.primaryLight,
     borderRadius: radius.lg,
@@ -3281,11 +3820,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 24,
     width: "80%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
   },
   confirmTitle: {
     fontSize: 17,

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import psycopg2
 import psycopg2.extras
 from app.core.config import DATABASE_URL
-from app.core.security import _hash_password
+from app.core.security import _generate_friend_code, _hash_password
 
 
 def _get_sync_db():
@@ -51,70 +51,70 @@ logger = logging.getLogger("stepup")
 
 UTILISATEURS_TEST = [
     {
-        "pseudo": "alice",
+        "pseudo": "Alice",
         "email": "alice@test.com",
         "password": "Test1234!",
         "age": 25, "genre": "femme",  "pays": "France",        "region": "Île-de-France",
         "coins": 850,  "gems": 5,  "xp_total": 2400, "is_admin": False,
     },
     {
-        "pseudo": "bob",
+        "pseudo": "Bob",
         "email": "bob@test.com",
         "password": "Test1234!",
         "age": 30, "genre": "homme", "pays": "France",        "region": "Bretagne",
         "coins": 620,  "gems": 3,  "xp_total": 1800, "is_admin": False,
     },
     {
-        "pseudo": "charlie",
+        "pseudo": "Charlie",
         "email": "charlie@test.com",
         "password": "Test1234!",
         "age": 22, "genre": "homme", "pays": "Belgique",       "region": None,
         "coins": 310,  "gems": 1,  "xp_total": 950,  "is_admin": False,
     },
     {
-        "pseudo": "diana",
+        "pseudo": "Diana",
         "email": "diana@test.com",
         "password": "Test1234!",
         "age": 28, "genre": "femme",  "pays": "France",        "region": "Occitanie",
         "coins": 1100, "gems": 8,  "xp_total": 3200, "is_admin": False,
     },
     {
-        "pseudo": "ethan",
+        "pseudo": "Ethan",
         "email": "ethan@test.com",
         "password": "Test1234!",
         "age": 19, "genre": "homme", "pays": "France",        "region": "Normandie",
         "coins": 200,  "gems": 0,  "xp_total": 420,  "is_admin": False,
     },
     {
-        "pseudo": "fanny",
+        "pseudo": "Fanny",
         "email": "fanny@test.com",
         "password": "Test1234!",
         "age": 33, "genre": "femme",  "pays": "Espagne",       "region": "Catalogne",
         "coins": 750,  "gems": 6,  "xp_total": 2100, "is_admin": False,
     },
     {
-        "pseudo": "gabriel",
+        "pseudo": "Gabriel",
         "email": "gabriel@test.com",
         "password": "Test1234!",
         "age": 26, "genre": "homme", "pays": "France",        "region": "PACA",
         "coins": 480,  "gems": 2,  "xp_total": 1350, "is_admin": False,
     },
     {
-        "pseudo": "hugo",
+        "pseudo": "Hugo",
         "email": "hugo@test.com",
         "password": "Test1234!",
         "age": 24, "genre": "homme", "pays": "Allemagne",      "region": "Bavière",
         "coins": 530,  "gems": 4,  "xp_total": 1600, "is_admin": False,
     },
     {
-        "pseudo": "isabelle",
+        "pseudo": "Isabelle",
         "email": "isabelle@test.com",
         "password": "Test1234!",
         "age": 31, "genre": "femme",  "pays": "France",        "region": "Grand Est",
         "coins": 290,  "gems": 1,  "xp_total": 680,  "is_admin": False,
     },
     {
-        "pseudo": "admin",
+        "pseudo": "Admin",
         "email": "admin@test.com",
         "password": "Test1234!",
         "age": 35, "genre": "autre",  "pays": "France",        "region": None,
@@ -131,52 +131,38 @@ COMMUNAUTES_TEST = [
 ]
 
 MEMBERSHIPS_TEST = {
-    "alice":    ["League of Legends", "Valorant"],
-    "bob":      ["Valorant", "Rocket League"],
-    "charlie":  ["League of Legends", "Rocket League"],
-    "diana":    ["League of Legends", "Valorant"],
-    "ethan":    ["Rocket League"],
-    "fanny":    ["Valorant"],
-    "gabriel":  ["Rocket League"],
-    "hugo":     ["League of Legends", "Rocket League"],
-    "isabelle": ["Valorant"],
-    "admin":    ["League of Legends", "Valorant", "Rocket League"],
+    "Alice":    ["League of Legends", "Valorant"],
+    "Bob":      ["Valorant", "Rocket League"],
+    "Charlie":  ["League of Legends", "Rocket League"],
+    "Diana":    ["League of Legends", "Valorant"],
+    "Ethan":    ["Rocket League"],
+    "Fanny":    ["Valorant"],
+    "Gabriel":  ["Rocket League"],
+    "Hugo":     ["League of Legends", "Rocket League"],
+    "Isabelle": ["Valorant"],
+    "Admin":    ["League of Legends", "Valorant", "Rocket League"],
 }
 
 # ─── Équipes esport ──────────────────────────────────────────────────────────
 
 EQUIPES_TEST = [
     # League of Legends
-    {"nom": "T1",            "jeu": "League of Legends", "couleur": "#C89B3C"},
-    {"nom": "Gen.G",         "jeu": "League of Legends", "couleur": "#000000"},
-    {"nom": "G2 Esports",    "jeu": "League of Legends", "couleur": "#1F1F1F"},
-    {"nom": "Fnatic",        "jeu": "League of Legends", "couleur": "#FF5900"},
-    {"nom": "Cloud9",        "jeu": "League of Legends", "couleur": "#1BA8FF"},
-    {"nom": "Team Liquid",   "jeu": "League of Legends", "couleur": "#026BE3"},
-    {"nom": "BLG",           "jeu": "League of Legends", "couleur": "#004B87"},
-    {"nom": "JDG",           "jeu": "League of Legends", "couleur": "#C8AA6E"},
-    {"nom": "NaVi",          "jeu": "League of Legends", "couleur": "#FFD700"},
-    {"nom": "MAD Lions",     "jeu": "League of Legends", "couleur": "#00C4FF"},
-    {"nom": "KT Rolster",    "jeu": "League of Legends", "couleur": "#E4002B"},
-    {"nom": "DRX",           "jeu": "League of Legends", "couleur": "#0044CC"},
-    {"nom": "Top Esports",   "jeu": "League of Legends", "couleur": "#1A1A1A"},
-    {"nom": "Weibo Gaming",  "jeu": "League of Legends", "couleur": "#D40000"},
-    {"nom": "LOUD",          "jeu": "League of Legends", "couleur": "#00FF00"},
-    {"nom": "Vitality",      "jeu": "League of Legends", "couleur": "#F4D000"},
+    {"nom": "T1",          "jeu": "League of Legends", "couleur": "#C89B3C"},
+    {"nom": "Gen.G",       "jeu": "League of Legends", "couleur": "#C8AA6E"},
+    {"nom": "G2 Esports",  "jeu": "League of Legends", "couleur": "#1F1F1F"},
+    {"nom": "Fnatic",      "jeu": "League of Legends", "couleur": "#FF5900"},
+    {"nom": "Cloud9",      "jeu": "League of Legends", "couleur": "#1BA8FF"},
+    {"nom": "Team Liquid", "jeu": "League of Legends", "couleur": "#026BE3"},
+    {"nom": "NaVi",        "jeu": "League of Legends", "couleur": "#FFD700"},
+    {"nom": "MAD Lions",   "jeu": "League of Legends", "couleur": "#00C4FF"},
+    {"nom": "Vitality",    "jeu": "League of Legends", "couleur": "#F4D000"},
     # Valorant
-    {"nom": "Sentinels",     "jeu": "Valorant", "couleur": "#E4002B"},
-    {"nom": "Fnatic",        "jeu": "Valorant", "couleur": "#FF5900"},
-    {"nom": "Team Vitality", "jeu": "Valorant", "couleur": "#F4D000"},
-    {"nom": "LOUD",          "jeu": "Valorant", "couleur": "#00FF00"},
-    {"nom": "NRG",           "jeu": "Valorant", "couleur": "#FF6B00"},
-    {"nom": "Paper Rex",     "jeu": "Valorant", "couleur": "#C8001E"},
-    {"nom": "EDG",           "jeu": "Valorant", "couleur": "#003DA5"},
+    {"nom": "Fnatic",      "jeu": "Valorant", "couleur": "#FF5900"},
+    {"nom": "Vitality",    "jeu": "Valorant", "couleur": "#F4D000"},
     # Rocket League
-    {"nom": "OG",            "jeu": "Rocket League", "couleur": "#0066CC"},
-    {"nom": "Team Liquid",   "jeu": "Rocket League", "couleur": "#026BE3"},
-    {"nom": "Karmine Corp",  "jeu": "Rocket League", "couleur": "#001AFF"},
-    {"nom": "G2 Esports",    "jeu": "Rocket League", "couleur": "#1F1F1F"},
-    {"nom": "Vitality",      "jeu": "Rocket League", "couleur": "#F4D000"},
+    {"nom": "Team Liquid", "jeu": "Rocket League", "couleur": "#026BE3"},
+    {"nom": "G2 Esports",  "jeu": "Rocket League", "couleur": "#1F1F1F"},
+    {"nom": "Vitality",    "jeu": "Rocket League", "couleur": "#F4D000"},
 ]
 
 # ─── Pronostics + Paris ───────────────────────────────────────────────────────
@@ -189,108 +175,108 @@ PARIS_TEST = [
             "titre": "PSG vs Marseille",
             "description": "Classique de la Ligue 1 — 38e journée",
             "prediction": "Victoire PSG",
-            "cote": 1.65, "statut": "ouvert", "categorie": "Football",
+            "cote": 1.65, "cote_team1": 1.65, "cote_team2": 2.40, "statut": "ouvert", "categorie": "Football",
         },
-        "pari": {"description": "Pariez sur le vainqueur du Classique", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=3)},
+        "pari": {"description": "Pariez sur le vainqueur du Classique", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=1)},
     },
     {
         "pronostic": {
             "titre": "Real Madrid vs FC Barcelone",
             "description": "El Clásico — Liga",
             "prediction": "Match nul",
-            "cote": 3.20, "statut": "ouvert", "categorie": "Football",
+            "cote": 3.20, "cote_team1": 1.90, "cote_team2": 2.05, "statut": "ouvert", "categorie": "Football",
         },
-        "pari": {"description": "Le duel au sommet de la Liga", "mise_min": 100, "statut": "actif", "date_debut": lambda: _dans(hours=24)},
+        "pari": {"description": "Le duel au sommet de la Liga", "mise_min": 100, "statut": "actif", "date_debut": lambda: _dans(days=3)},
     },
     {
         "pronostic": {
             "titre": "Nantes vs Lyon",
             "description": "Ligue 1 — Journée 32",
             "prediction": "Victoire Lyon",
-            "cote": 2.10, "statut": "ouvert", "categorie": "Football",
+            "cote": 2.10, "cote_team1": 2.80, "cote_team2": 2.10, "statut": "ouvert", "categorie": "Football",
         },
-        "pari": {"description": "Les Gones l'emportent à la Beaujoire ?", "mise_min": 30, "statut": "actif", "date_debut": lambda: _dans(minutes=10)},
+        "pari": {"description": "Les Gones l'emportent à la Beaujoire ?", "mise_min": 30, "statut": "actif", "date_debut": lambda: _dans(days=2)},
     },
     {
         "pronostic": {
             "titre": "Manchester City vs Arsenal",
             "description": "Premier League — Dernier virage du titre",
             "prediction": "Victoire Manchester City",
-            "cote": 1.75, "statut": "ouvert", "categorie": "Football",
+            "cote": 1.75, "cote_team1": 1.75, "cote_team2": 2.30, "statut": "ouvert", "categorie": "Football",
         },
-        "pari": {"description": "City peut-il conserver son titre ?", "mise_min": 80, "statut": "actif", "date_debut": lambda: _dans(hours=48)},
+        "pari": {"description": "City peut-il conserver son titre ?", "mise_min": 80, "statut": "actif", "date_debut": lambda: _dans(days=5)},
     },
     {
         "pronostic": {
             "titre": "T1 vs Cloud9 — Worlds 2025",
             "description": "Quart de finale Worlds League of Legends",
             "prediction": "Victoire T1",
-            "cote": 1.45, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.45, "cote_team1": 1.45, "cote_team2": 2.75, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Qui passera en demi-finale ?", "mise_min": 75, "statut": "actif", "date_debut": lambda: _dans(hours=2)},
+        "pari": {"description": "Qui passera en demi-finale ?", "mise_min": 75, "statut": "actif", "date_debut": lambda: _dans(days=4)},
     },
     {
         "pronostic": {
-            "titre": "G2 vs Fnatic — LEC Spring",
+            "titre": "G2 Esports vs Fnatic — LEC Spring",
             "description": "Demi-finale LEC Spring Split",
             "prediction": "Victoire G2",
-            "cote": 1.60, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.60, "cote_team1": 1.60, "cote_team2": 2.50, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "G2 vers la grande finale ?", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(hours=5)},
+        "pari": {"description": "G2 Esports vers la grande finale ?", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(days=6)},
     },
     {
         "pronostic": {
-            "titre": "BLG vs JDG — LPL Summer",
-            "description": "Demi-finale LPL Summer Split 2025",
-            "prediction": "Victoire BLG",
-            "cote": 1.75, "statut": "ouvert", "categorie": "League of Legends",
+            "titre": "Gen.G vs NaVi — LCK Playoffs",
+            "description": "Demi-finale LCK Summer Split 2025",
+            "prediction": "Victoire Gen.G",
+            "cote": 1.75, "cote_team1": 1.75, "cote_team2": 2.20, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Le derby chinois des titans", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(hours=3)},
+        "pari": {"description": "Gen.G peut-il éliminer NaVi ?", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(days=7)},
     },
     {
         "pronostic": {
             "titre": "T1 vs Gen.G — LCK Summer",
             "description": "Grande finale LCK Summer 2025",
             "prediction": "Victoire Gen.G",
-            "cote": 2.10, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 2.10, "cote_team1": 1.80, "cote_team2": 2.10, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Qui domine le LCK cet été ?", "mise_min": 80, "statut": "actif", "date_debut": lambda: _dans(hours=7)},
+        "pari": {"description": "Qui domine le LCK cet été ?", "mise_min": 80, "statut": "actif", "date_debut": lambda: _dans(days=8)},
     },
     {
         "pronostic": {
-            "titre": "NaVi vs G2 — LEC Playoffs",
+            "titre": "NaVi vs G2 Esports — LEC Playoffs",
             "description": "Quart de finale LEC Summer Split",
             "prediction": "Victoire G2",
-            "cote": 1.55, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.55, "cote_team1": 2.60, "cote_team2": 1.55, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "G2 confirme sa domination en Europe ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=4)},
+        "pari": {"description": "G2 Esports confirme sa domination en Europe ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=9)},
     },
     {
         "pronostic": {
             "titre": "Cloud9 vs Team Liquid — LCS Finals",
             "description": "Grande finale LCS Summer 2025",
             "prediction": "Victoire Cloud9",
-            "cote": 1.80, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.80, "cote_team1": 1.80, "cote_team2": 2.15, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Le choc américain du split", "mise_min": 70, "statut": "actif", "date_debut": lambda: _dans(hours=6)},
+        "pari": {"description": "Le choc américain du split", "mise_min": 70, "statut": "actif", "date_debut": lambda: _dans(days=10)},
     },
     {
         "pronostic": {
-            "titre": "LOUD vs RED Canids — CBLOL",
-            "description": "Grande finale CBLOL Summer 2025",
-            "prediction": "Victoire LOUD",
-            "cote": 1.65, "statut": "ouvert", "categorie": "League of Legends",
+            "titre": "MAD Lions vs Vitality — LEC Summer",
+            "description": "Grande finale LEC Summer 2025",
+            "prediction": "Victoire MAD Lions",
+            "cote": 1.65, "cote_team1": 1.65, "cote_team2": 2.35, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "LOUD roi du Brésil encore une fois ?", "mise_min": 40, "statut": "actif", "date_debut": lambda: _dans(hours=9)},
+        "pari": {"description": "MAD Lions confirme sa domination en Europe ?", "mise_min": 40, "statut": "actif", "date_debut": lambda: _dans(days=11)},
     },
     {
         "pronostic": {
-            "titre": "KT Rolster vs DRX — LCK",
-            "description": "Match de régularité LCK Summer — Semaine 8",
-            "prediction": "Victoire KT Rolster",
-            "cote": 1.90, "statut": "ouvert", "categorie": "League of Legends",
+            "titre": "Fnatic vs Cloud9 — Worlds 2025",
+            "description": "Phase de groupes Worlds 2025",
+            "prediction": "Victoire Fnatic",
+            "cote": 1.90, "cote_team1": 1.90, "cote_team2": 2.00, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "KT peut-il renverser DRX ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=12)},
+        "pari": {"description": "L'Europe tient-elle face à l'Amérique du Nord ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=12)},
     },
     {
         "pronostic": {
@@ -299,79 +285,79 @@ PARIS_TEST = [
             "prediction": "Match nul (bo1 remporté par MAD)",
             "cote": 2.50, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Upset ou performance attendue ?", "mise_min": 40, "statut": "actif", "date_debut": lambda: _dans(hours=8)},
+        "pari": {"description": "Upset ou performance attendue ?", "mise_min": 40, "statut": "actif", "date_debut": lambda: _dans(days=13)},
     },
     {
         "pronostic": {
-            "titre": "Weibo Gaming vs Top Esports",
-            "description": "LPL Summer — Semaine 9",
-            "prediction": "Victoire Top Esports",
-            "cote": 1.70, "statut": "ouvert", "categorie": "League of Legends",
+            "titre": "Gen.G vs Team Liquid — LCK",
+            "description": "LCK Summer — Semaine 9",
+            "prediction": "Victoire Gen.G",
+            "cote": 1.70, "cote_team1": 1.70, "cote_team2": 2.30, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "TES se relève après sa défaite ?", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(hours=10)},
+        "pari": {"description": "Gen.G garde son avance au classement ?", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(days=14)},
     },
     {
         "pronostic": {
-            "titre": "T1 vs BLG — Worlds 2025 Finale",
+            "titre": "T1 vs MAD Lions — Worlds 2025 Finale",
             "description": "Grande finale des Worlds 2025",
             "prediction": "Victoire T1",
-            "cote": 1.50, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.50, "cote_team1": 1.50, "cote_team2": 2.60, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "Faker soulève une 5e coupe du monde ?", "mise_min": 100, "statut": "actif", "date_debut": lambda: _dans(hours=24)},
+        "pari": {"description": "Faker soulève une 5e coupe du monde ?", "mise_min": 100, "statut": "actif", "date_debut": lambda: _dans(days=15)},
     },
     {
         "pronostic": {
-            "titre": "G2 vs Cloud9 — Worlds Group Stage",
+            "titre": "G2 Esports vs Cloud9 — Worlds Group Stage",
             "description": "Phase de groupes Worlds 2025",
             "prediction": "Victoire G2",
-            "cote": 1.45, "statut": "ouvert", "categorie": "League of Legends",
+            "cote": 1.45, "cote_team1": 1.45, "cote_team2": 2.80, "statut": "ouvert", "categorie": "League of Legends",
         },
-        "pari": {"description": "L'Europe domine l'Amérique du Nord", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=15)},
+        "pari": {"description": "L'Europe domine l'Amérique du Nord", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=7)},
     },
     {
         "pronostic": {
             "titre": "Fnatic vs MAD Lions — LEC",
             "description": "LEC Summer — Derby européen",
             "prediction": "Victoire Fnatic",
-            "cote": 2.00, "statut": "termine", "categorie": "League of Legends",
+            "cote": 2.00, "cote_team1": 2.00, "cote_team2": 1.90, "statut": "termine", "categorie": "League of Legends",
         },
         "pari": {"description": "Le vieux lion se réveille ?", "mise_min": 40, "statut": "ferme", "date_debut": lambda: _il_y_a(hours=3)},
     },
     {
         "pronostic": {
-            "titre": "JDG vs NRG — Worlds 2024 SF",
+            "titre": "NaVi vs Cloud9 — Worlds 2024 SF",
             "description": "Demi-finale Worlds 2024 (archivé)",
-            "prediction": "Victoire JDG",
-            "cote": 1.35, "statut": "termine", "categorie": "League of Legends",
+            "prediction": "Victoire NaVi",
+            "cote": 1.35, "cote_team1": 1.35, "cote_team2": 3.10, "statut": "termine", "categorie": "League of Legends",
         },
-        "pari": {"description": "JDG en route vers la finale ?", "mise_min": 75, "statut": "regle", "date_debut": lambda: _il_y_a(days=5)},
+        "pari": {"description": "NaVi en route vers la finale ?", "mise_min": 75, "statut": "regle", "date_debut": lambda: _il_y_a(days=5)},
     },
     {
         "pronostic": {
             "titre": "Fnatic vs Vitality — VCT EMEA",
-            "description": "Valorant Champions Tour EMEA",
+            "description": "Valorant Champions Tour EMEA 2025",
             "prediction": "Victoire Vitality",
-            "cote": 1.90, "statut": "ouvert", "categorie": "Valorant",
+            "cote": 1.90, "cote_team1": 2.20, "cote_team2": 1.90, "statut": "ouvert", "categorie": "Valorant",
         },
-        "pari": {"description": "Le duel franco-britannique", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(hours=1)},
+        "pari": {"description": "Le duel franco-britannique", "mise_min": 60, "statut": "actif", "date_debut": lambda: _dans(days=2)},
     },
     {
         "pronostic": {
-            "titre": "Sentinels vs LOUD — VCT Americas",
-            "description": "Playoffs VCT Americas",
-            "prediction": "Victoire LOUD",
-            "cote": 2.05, "statut": "ouvert", "categorie": "Valorant",
+            "titre": "Vitality vs Fnatic — VCT Americas",
+            "description": "Playoffs VCT Americas 2025",
+            "prediction": "Victoire Vitality",
+            "cote": 2.05, "cote_team1": 2.05, "cote_team2": 1.85, "statut": "ouvert", "categorie": "Valorant",
         },
-        "pari": {"description": "LOUD confirme sa domination ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=6)},
+        "pari": {"description": "Vitality confirme sa domination ?", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=5)},
     },
     {
         "pronostic": {
-            "titre": "OG vs Team Liquid — RLCS",
+            "titre": "G2 Esports vs Team Liquid — RLCS",
             "description": "RLCS Spring Split — Playoffs",
-            "prediction": "Victoire OG",
-            "cote": 2.30, "statut": "ouvert", "categorie": "Rocket League",
+            "prediction": "Victoire G2 Esports",
+            "cote": 2.30, "cote_team1": 2.30, "cote_team2": 1.70, "statut": "ouvert", "categorie": "Rocket League",
         },
-        "pari": {"description": "Playoffs Rocket League RLCS", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(hours=4)},
+        "pari": {"description": "Playoffs Rocket League RLCS", "mise_min": 50, "statut": "actif", "date_debut": lambda: _dans(days=3)},
     },
     # ── Fermés ──────────────────────────────────────────────────────
     {
@@ -379,16 +365,16 @@ PARIS_TEST = [
             "titre": "Monaco vs Lens",
             "description": "Ligue 1 — Journée 28",
             "prediction": "Victoire Monaco",
-            "cote": 1.55, "statut": "termine", "categorie": "Football",
+            "cote": 1.55, "cote_team1": 1.55, "cote_team2": 2.45, "statut": "termine", "categorie": "Football",
         },
         "pari": {"description": "Monaco consolide sa 2e place", "mise_min": 40, "statut": "ferme", "date_debut": lambda: _il_y_a(hours=2)},
     },
     {
         "pronostic": {
-            "titre": "NaVi vs G2 — CS2 Major",
+            "titre": "NaVi vs G2 Esports — CS2 Major",
             "description": "Grande finale du Major CS2",
             "prediction": "Victoire G2",
-            "cote": 1.85, "statut": "termine", "categorie": "CS2",
+            "cote": 1.85, "cote_team1": 2.10, "cote_team2": 1.85, "statut": "termine", "categorie": "CS2",
         },
         "pari": {"description": "Qui lève le trophée du Major ?", "mise_min": 75, "statut": "ferme", "date_debut": lambda: _il_y_a(days=1)},
     },
@@ -398,31 +384,16 @@ PARIS_TEST = [
             "titre": "France vs Espagne — Euro 2025",
             "description": "Demi-finale de l'Euro 2025",
             "prediction": "Victoire France",
-            "cote": 2.00, "statut": "termine", "categorie": "Football",
+            "cote": 2.00, "cote_team1": 2.00, "cote_team2": 1.95, "statut": "termine", "categorie": "Football",
         },
         "pari": {"description": "Les Bleus en finale !", "mise_min": 100, "statut": "regle", "date_debut": lambda: _il_y_a(days=3)},
-    },
-    {
-        "pronostic": {
-            "titre": "NaVi vs G2 — CS2 Major",
-            "description": "Grande finale du Major CS2",
-            "prediction": "Victoire G2",
-            "cote": 1.85,
-            "statut": "termine",
-        },
-        "pari": {
-            "description": "Qui lève le trophée du Major ?",
-            "mise_min": 75,
-            "statut": "regle",
-        },
     },
     {
         "pronostic": {
             "titre": "Bayern Munich vs Dortmund",
             "description": "Der Klassiker — Bundesliga",
             "prediction": "Match nul",
-            "cote": 3.50,
-            "statut": "termine",
+            "cote": 3.50, "cote_team1": 1.70, "cote_team2": 2.80, "statut": "termine",
         },
         "pari": {
             "description": "Le choc allemand de la saison",
@@ -453,17 +424,19 @@ def seed_dev_data() -> None:
                 cur.execute("SELECT id FROM users WHERE email = %s", (u["email"],))
                 if cur.fetchone():
                     continue
+                friend_code = _generate_friend_code()
                 cur.execute(
                     """
                     INSERT INTO users (
                         pseudo, email, password_hash, age, genre, pays, region,
-                        coins, gems, xp_total, is_admin
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        coins, gems, xp_total, is_admin, friend_code
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         u["pseudo"], u["email"], _hash_password(u["password"]),
                         u["age"], u["genre"], u["pays"], u.get("region"),
                         u["coins"], u["gems"], u["xp_total"], u["is_admin"],
+                        friend_code,
                     ),
                 )
                 users_created += 1
@@ -562,7 +535,7 @@ def seed_dev_data() -> None:
                         equipes_assigned += 1
 
             # ── Pronostics + Paris ────────────────────────────────────
-            cur.execute("SELECT id FROM users WHERE pseudo = 'admin'")
+            cur.execute("SELECT id FROM users WHERE LOWER(pseudo) = 'admin'")
             admin_row = cur.fetchone()
             if admin_row:
                 admin_id = admin_row["id"]
@@ -576,11 +549,12 @@ def seed_dev_data() -> None:
                         continue
                     cur.execute(
                         """
-                        INSERT INTO pronostics (user_id, titre, description, prediction, cote, statut, categorie)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO pronostics (user_id, titre, description, prediction, cote, cote_team1, cote_team2, statut, categorie)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
-                        (admin_id, p["titre"], p["description"], p["prediction"], p["cote"], p["statut"], p.get("categorie", "Autre")),
+                        (admin_id, p["titre"], p["description"], p["prediction"], p["cote"],
+                         p.get("cote_team1"), p.get("cote_team2"), p["statut"], p.get("categorie", "Autre")),
                     )
                     pronostic_id = cur.fetchone()["id"]
                     pronostics_created += 1
